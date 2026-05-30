@@ -31,6 +31,7 @@ const allowedOrigins = [
   "https://hrms-420.netlify.app",
   "http://localhost:5173",
   "http://localhost:3000",
+  "https://nilayam.netlify.app",
   "https://hrms-vaz.netlify.app",
 ];
 
