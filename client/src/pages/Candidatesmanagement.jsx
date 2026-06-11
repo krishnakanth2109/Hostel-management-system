@@ -42,6 +42,29 @@ const rentPill = (status) => {
 };
 
 // ─── Profile Image Full Popup ─────────────────────────────────────────────────
+const AdvanceBadge = ({ expected = 0, paid = 0, size = "md" }) => {
+  const pending = Math.max(0, Number(expected || 0) - Number(paid || 0));
+  if (Number(expected || 0) <= 0) return null;
+  const isPaid = pending <= 0;
+  const compact = size === "sm";
+  if (compact) {
+    return (
+      <span className={`inline-flex items-center rounded-md border px-2 py-0.5 text-[11px] font-bold ${isPaid ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-orange-200 bg-orange-50 text-orange-700"}`}>
+        Adv {fmt(isPaid ? paid : pending)}
+      </span>
+    );
+  }
+  return (
+    <span className={`inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-xs font-bold ${isPaid ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-orange-200 bg-orange-50 text-orange-700"}`}>
+      <span className="flex h-7 w-7 items-center justify-center rounded-full bg-white text-sm">₹</span>
+      <span className="leading-tight">
+        <span className="block uppercase tracking-wide">{isPaid ? "Advance Paid" : "Advance Pending"}</span>
+        <span className="block text-base text-gray-900">{fmt(isPaid ? paid : pending)}</span>
+      </span>
+    </span>
+  );
+};
+
 function ProfileImagePopup({ imageUrl, name, onClose }) {
   return (
     <div
@@ -265,6 +288,7 @@ function CandidateDetailModal({ tenantId, onClose, onCandidateUpdated }) {
         permanentAddress: t.permanentAddress || "",
         joiningDate:      t.joiningDate ? t.joiningDate.slice(0, 10) : "",
         rentAmount:       t.rentAmount || "",
+        advanceAmount:    t.advanceAmount || "",
       });
     }
   }, [data]);
@@ -289,6 +313,7 @@ function CandidateDetailModal({ tenantId, onClose, onCandidateUpdated }) {
       fd.append("permanentAddress", editForm.permanentAddress);
       fd.append("joiningDate",      editForm.joiningDate);
       fd.append("rentAmount",       editForm.rentAmount);
+      fd.append("advanceAmount",    editForm.advanceAmount || "0");
       if (docFiles.aadharFront)   fd.append("aadharFront",   docFiles.aadharFront);
       if (docFiles.aadharBack)    fd.append("aadharBack",    docFiles.aadharBack);
       if (docFiles.passportPhoto) fd.append("passportPhoto", docFiles.passportPhoto);
@@ -335,9 +360,11 @@ function CandidateDetailModal({ tenantId, onClose, onCandidateUpdated }) {
 
   if (!data && !loading) return null;
 
-  const { tenant, buildingDetails, currentRecord, remaining, history, pendingMonths, arrearsTotal, totalAccumulatedDue, hasPreviousPending, pendingMonthsCount } = data || {};
+  const { tenant, buildingDetails, currentRecord, remaining, history, pendingMonths, arrearsTotal, totalAccumulatedDue, hasPreviousPending, pendingMonthsCount, advancePending = 0 } = data || {};
   const phone        = tenant?.phone?.replace(/\D/g, "");
   const passportPhoto = tenant?.documents?.passportPhoto;
+  const advanceAmount = Number(tenant?.advanceAmount || 0);
+  const paidAdvanceAmount = Number(tenant?.paidadvanceAmount || 0);
   const inputClass   = "w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-gray-900 text-sm focus:outline-none focus:border-amber-400 transition-colors";
 
   return (
@@ -443,6 +470,9 @@ function CandidateDetailModal({ tenantId, onClose, onCandidateUpdated }) {
                         {statusPill(tenant?.status)}
                       </div>
                       <p className="text-gray-500 text-sm truncate mt-0.5">{tenant?.email || "No email on record"}</p>
+                      <div className="mt-2">
+                        <AdvanceBadge expected={advanceAmount} paid={paidAdvanceAmount} />
+                      </div>
                       <div className="flex flex-wrap gap-2 mt-2">
                         <button
                           onClick={() => window.open(`https://wa.me/91${phone}`, "_blank")}
@@ -473,6 +503,7 @@ function CandidateDetailModal({ tenantId, onClose, onCandidateUpdated }) {
                           { label: "Phone *",            key: "phone",            type: "tel",    placeholder: "Phone number" },
                           { label: "Email",              key: "email",            type: "email",  placeholder: "Email address" },
                           { label: "Monthly Rent (₹) *", key: "rentAmount",       type: "number", placeholder: "Rent amount" },
+                          { label: "Advance Amount",     key: "advanceAmount",    type: "number", placeholder: "Advance amount" },
                           { label: "Joining Date",       key: "joiningDate",      type: "date",   placeholder: "" },
                           { label: "Permanent Address",  key: "permanentAddress", type: "text",   placeholder: "Permanent address" },
                         ].map(({ label, key, type, placeholder }) => (
@@ -622,7 +653,9 @@ function CandidateDetailModal({ tenantId, onClose, onCandidateUpdated }) {
                         ["Email",             tenant?.email],
                         ["Joining Date",      fmtDate(tenant?.joiningDate)],
                         ["Monthly Rent",      fmt(tenant?.rentAmount)],
-                        ["Advance Paid",      tenant?.advanceAmount ? fmt(tenant.advanceAmount) : null],
+                        ["Advance Expected",  advanceAmount > 0 ? fmt(advanceAmount) : null],
+                        ["Advance Paid",      advanceAmount > 0 ? fmt(paidAdvanceAmount) : null],
+                        ["Advance Pending",   advanceAmount > 0 ? fmt(advancePending) : null],
                         ["Permanent Address", tenant?.permanentAddress],
                         buildingDetails && ["Building",  buildingDetails.buildingName],
                         buildingDetails && ["Floor",     `Floor ${buildingDetails.floorNumber}`],
@@ -758,6 +791,7 @@ function CandidateCard({ tenant, rentInfo, onViewMore, onPhotoClick }) {
   const photo    = tenant.documents?.passportPhoto;
   const initials = tenant.name?.[0]?.toUpperCase();
   const isOverdue = rentInfo?.hasPreviousPending;
+  const { advanceAmount, paidadvanceAmount } = getAdvanceValues(tenant, rentInfo);
 
   return (
     <div className={`bg-white rounded-2xl border shadow-sm hover:shadow-md transition-all duration-200 overflow-hidden
@@ -820,6 +854,9 @@ function CandidateCard({ tenant, rentInfo, onViewMore, onPhotoClick }) {
           <div className="rounded-lg bg-amber-50 border border-amber-100 px-3 py-2">
             <p className="text-amber-500 text-[10px] uppercase tracking-wide">Rent</p>
             <p className="text-gray-800 text-xs font-semibold mt-0.5">{fmt(tenant.rentAmount)}</p>
+          </div>
+          <div className="col-span-2">
+            <AdvanceBadge expected={advanceAmount} paid={paidadvanceAmount} size="sm" />
           </div>
           <div className="col-span-2 rounded-lg bg-gray-50 border border-gray-100 px-3 py-2">
             <p className="text-gray-400 text-[10px] uppercase tracking-wide">Room Allocated</p>
@@ -900,6 +937,17 @@ function ArrearCell({ rentInfo }) {
 }
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
+function getAdvanceValues(tenant = {}, rentInfo = null) {
+  const advanceAmount = Number(rentInfo?.advanceAmount ?? rentInfo?.tenant?.advanceAmount ?? tenant.advanceAmount ?? 0);
+  const paidadvanceAmount = Number(rentInfo?.paidadvanceAmount ?? rentInfo?.tenant?.paidadvanceAmount ?? tenant.paidadvanceAmount ?? 0);
+  const advancePending = Math.max(0, Number(rentInfo?.advancePending ?? (advanceAmount - paidadvanceAmount)));
+  return {
+    advanceAmount: advanceAmount > 0 ? advanceAmount : paidadvanceAmount + advancePending,
+    paidadvanceAmount,
+    advancePending,
+  };
+}
+
 export default function CandidatesManagement() {
   const location = useLocation();
 
@@ -1024,6 +1072,7 @@ export default function CandidatesManagement() {
     const alloc    = tenant.allocationInfo || {};
     const photo    = tenant.documents?.passportPhoto;
     const rentInfo = getRentInfo(tenant._id);
+    const { advanceAmount, paidadvanceAmount } = getAdvanceValues(tenant, rentInfo);
     const rowBg    = isInactive
       ? "hover:bg-gray-50/60 opacity-70"
       : rentInfo?.hasPreviousPending
@@ -1070,9 +1119,9 @@ export default function CandidatesManagement() {
         {/* Rent */}
         <td className="px-4 py-3.5">
           <p className="text-gray-900 font-bold text-sm">{fmt(tenant.rentAmount)}</p>
-          {tenant.advanceAmount > 0 && (
-            <p className="text-gray-400 text-[11px] mt-0.5">Adv: {fmt(tenant.advanceAmount)}</p>
-          )}
+          <div className="mt-1.5">
+            <AdvanceBadge expected={advanceAmount} paid={paidadvanceAmount} size="sm" />
+          </div>
         </td>
 
         {/* Rent Status */}

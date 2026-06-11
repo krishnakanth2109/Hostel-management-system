@@ -110,6 +110,45 @@ const otpEmailHtml = (otpCode) => `
 </html>`;
 
 // ── POST /api/tenants/send-email-otp ─────────────────────────────────────────
+const advanceAmountUpdatedEmailHtml = ({ tenant, previousAdvance, newAdvance, paidAdvance }) => {
+  const fmtINR = (n) => new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(n || 0);
+  const pendingAdvance = Math.max(0, Number(newAdvance || 0) - Number(paidAdvance || 0));
+  return `
+<!DOCTYPE html>
+<html>
+<body style="margin:0;padding:0;background:#f1f5f9;font-family:'Segoe UI',Tahoma,sans-serif;">
+  <table width="100%" cellspacing="0" cellpadding="0" style="padding:32px 15px;">
+    <tr><td align="center">
+      <table width="560" cellspacing="0" cellpadding="0" style="background:#fff;border-radius:18px;overflow:hidden;box-shadow:0 8px 28px rgba(0,0,0,0.10);">
+        <tr>
+          <td style="background:linear-gradient(135deg,#d97706,#f59e0b);padding:30px 32px;text-align:center;">
+            <div style="font-size:38px;margin-bottom:8px;">💳</div>
+            <h1 style="margin:0;font-size:22px;color:#fff;font-weight:800;">Advance Amount Updated</h1>
+            <p style="margin:8px 0 0;color:#fffbeb;font-size:13px;">Nilayam Hostel Management</p>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:30px 32px;">
+            <p style="margin:0 0 18px;font-size:15px;color:#374151;line-height:1.7;">
+              Hello <strong>${tenant.name}</strong>, your hostel advance amount has been updated by management.
+            </p>
+            <div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:14px;padding:18px;margin-bottom:20px;">
+              <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #ffedd5;"><span style="color:#6b7280;font-size:13px;">Previous Advance</span><strong style="color:#111827;font-size:14px;">${fmtINR(previousAdvance)}</strong></div>
+              <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #ffedd5;"><span style="color:#6b7280;font-size:13px;">Advance Expected</span><strong style="color:#d97706;font-size:14px;">${fmtINR(newAdvance)}</strong></div>
+              <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #ffedd5;"><span style="color:#6b7280;font-size:13px;">Advance Paid</span><strong style="color:#047857;font-size:14px;">${fmtINR(paidAdvance)}</strong></div>
+              <div style="display:flex;justify-content:space-between;padding:8px 0;"><span style="color:#6b7280;font-size:13px;">Advance Pending</span><strong style="color:${pendingAdvance > 0 ? "#dc2626" : "#047857"};font-size:14px;">${fmtINR(pendingAdvance)}</strong></div>
+            </div>
+            <p style="margin:0;font-size:13px;color:#6b7280;line-height:1.7;">Please complete any pending advance payment or contact your hostel manager for assistance.</p>
+          </td>
+        </tr>
+        <tr><td style="background:#f8fafc;padding:16px 32px;text-align:center;font-size:12px;color:#9ca3af;">This is an automated message. Please do not reply to this email.</td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+};
+
 router.post("/send-email-otp", async (req, res) => {
   try {
     const { email, name } = req.body;
@@ -363,7 +402,7 @@ router.post("/register-via-link", upload.fields([{ name: "aadharFront", maxCount
         const tenant = new Tenant({
           owner: ownerId, name: name.trim(), phone: phone.trim(), email, fatherName, fatherPhone,
           permanentAddress: permanentAddress.trim(), joiningDate, rentAmount: Number(rentAmount),
-          advanceAmount: advance, documents, buildingId, floorId, roomId, bedId, allocationInfo,
+          advanceAmount: advance, paidadvanceAmount: 0, documents, buildingId, floorId, roomId, bedId, allocationInfo,
           source: "onboarding-link", isVerified: false
         });
         await tenant.save();
@@ -380,7 +419,7 @@ router.post("/register-via-link", upload.fields([{ name: "aadharFront", maxCount
       const tenant = new Tenant({
         owner: ownerId, name: name.trim(), phone: phone.trim(), email, fatherName, fatherPhone,
         permanentAddress: permanentAddress.trim(), joiningDate, rentAmount: Number(rentAmount),
-        advanceAmount: advance, documents, source: "onboarding-link", isVerified: false
+        advanceAmount: advance, paidadvanceAmount: 0, documents, source: "onboarding-link", isVerified: false
       });
       await tenant.save();
       await logActivity(ownerId, "ONBOARD", "Tenant", `New registration: ${name} (Waiting for room)`);
@@ -439,7 +478,7 @@ router.post("/", auth, upload.fields([{ name: "aadharFront" }, { name: "aadharBa
         };
 
         const tenant = new Tenant({
-          owner: req.user.id, name: name.trim(), phone: phone.trim(), email, fatherName, fatherPhone, permanentAddress, joiningDate, rentAmount: Number(rentAmount), advanceAmount: advance, documents, buildingId, floorId, roomId, bedId, allocationInfo
+          owner: req.user.id, name: name.trim(), phone: phone.trim(), email, fatherName, fatherPhone, permanentAddress, joiningDate, rentAmount: Number(rentAmount), advanceAmount: advance, paidadvanceAmount: 0, documents, buildingId, floorId, roomId, bedId, allocationInfo
         });
         await tenant.save();
 
@@ -451,7 +490,7 @@ router.post("/", auth, upload.fields([{ name: "aadharFront" }, { name: "aadharBa
         return res.status(201).json({ message: "Tenant added.", tenant });
       }
 
-      const tenant = new Tenant({ owner: req.user.id, name, phone, email, fatherName, fatherPhone, permanentAddress, joiningDate, rentAmount: Number(rentAmount), advanceAmount: advance, documents });
+      const tenant = new Tenant({ owner: req.user.id, name, phone, email, fatherName, fatherPhone, permanentAddress, joiningDate, rentAmount: Number(rentAmount), advanceAmount: advance, paidadvanceAmount: 0, documents });
       await tenant.save();
       await logActivity(req.user.id, "CREATE", "Tenant", `Added Tenant: ${name} (No Room Assigned)`);
       res.status(201).json({ message: "Tenant added successfully.", tenant });
@@ -481,6 +520,16 @@ router.put("/:id", auth, upload.fields([{ name: "aadharFront" }, { name: "aadhar
     if (!existingTenant) return res.status(404).json({ message: "Tenant not found." });
 
     const updateData = { ...req.body };
+    const previousAdvanceAmount = Number(existingTenant.advanceAmount || 0);
+    let advanceAmountWasChanged = false;
+    if (Object.prototype.hasOwnProperty.call(updateData, "rentAmount")) {
+      updateData.rentAmount = Number(updateData.rentAmount || 0);
+    }
+    if (Object.prototype.hasOwnProperty.call(updateData, "advanceAmount")) {
+      updateData.advanceAmount = Number(updateData.advanceAmount || 0);
+      advanceAmountWasChanged = updateData.advanceAmount !== previousAdvanceAmount;
+    }
+    delete updateData.paidadvanceAmount;
     if (req.files && Object.keys(req.files).length > 0) {
       const newDocs = await resolveDocUrls(req.files);
       if (newDocs.aadharFront)   updateData["documents.aadharFront"]   = newDocs.aadharFront;
@@ -496,6 +545,25 @@ router.put("/:id", auth, upload.fields([{ name: "aadharFront" }, { name: "aadhar
     const info = existingTenant.allocationInfo;
     const loc = info?.buildingName ? `(${info.buildingName} ➔ Room ${info.roomNumber})` : "(Unallocated)";
     await logActivity(req.user.id, "UPDATE", "Tenant", `Updated details for ${updatedTenant.name} ${loc}`);
+
+    if (advanceAmountWasChanged && updatedTenant.email) {
+      try {
+        const advanceFmt = new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 });
+        await sendBrevoEmail(
+          updatedTenant.email,
+          updatedTenant.name,
+          `Advance Amount Updated - ${advanceFmt.format(updatedTenant.advanceAmount || 0)}`,
+          advanceAmountUpdatedEmailHtml({
+            tenant: updatedTenant,
+            previousAdvance: previousAdvanceAmount,
+            newAdvance: Number(updatedTenant.advanceAmount || 0),
+            paidAdvance: Number(updatedTenant.paidadvanceAmount || 0),
+          })
+        );
+      } catch (e) {
+        console.error("Advance update email failed:", e.message);
+      }
+    }
 
     res.json({ message: "Tenant updated.", tenant: updatedTenant });
   } catch (err) { res.status(500).json({ message: "Server error.", error: err.message }); }

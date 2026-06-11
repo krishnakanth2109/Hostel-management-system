@@ -37,15 +37,69 @@ const pill = (status) => (
   </span>
 );
 
-function buildPayable(pendingMonths = [], record = null, remaining = 0) {
+const AdvanceBadge = ({ expected = 0, paid = 0, size = "md" }) => {
+  const pending = Math.max(0, Number(expected || 0) - Number(paid || 0));
+  if (Number(expected || 0) <= 0) return null;
+  const isPaid = pending <= 0;
+  const compact = size === "sm";
+  if (compact) {
+    return (
+      <span className={`inline-flex items-center rounded-md border px-2 py-0.5 text-[11px] font-bold ${isPaid ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-orange-200 bg-orange-50 text-orange-700"}`}>
+        Adv {fmt(isPaid ? paid : pending)}
+      </span>
+    );
+  }
+  return (
+    <span className={`inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-xs font-bold ${isPaid ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-orange-200 bg-orange-50 text-orange-700"}`}>
+      <span className="flex h-7 w-7 items-center justify-center rounded-full bg-white text-sm">₹</span>
+      <span className="leading-tight">
+        <span className="block uppercase tracking-wide">{isPaid ? "Advance Paid" : "Advance Pending"}</span>
+        <span className="block text-base text-gray-900">{fmt(isPaid ? paid : pending)}</span>
+      </span>
+    </span>
+  );
+};
+
+function buildPayable(pendingMonths = [], record = null, remaining = 0, advancePending = 0) {
   const arr = [];
   pendingMonths.forEach((pm) => {
     const rem = pm.rentAmount - pm.paidAmount;
-    if (rem > 0) arr.push({ monthYear: pm.monthYear, maxAmount: rem, label: `${fmtMonthYear(pm.dueDate)} (Arrears)` });
+    if (rem > 0) arr.push({ type: "rent", monthYear: pm.monthYear, key: `rent:${pm.monthYear}`, maxAmount: rem, label: `${fmtMonthYear(pm.dueDate)} (Arrears)` });
   });
   if (record && remaining > 0)
-    arr.push({ monthYear: record.monthYear, maxAmount: remaining, label: `${fmtMonthYear(record.dueDate)} (Current)` });
+    arr.push({ type: "rent", monthYear: record.monthYear, key: `rent:${record.monthYear}`, maxAmount: remaining, label: `${fmtMonthYear(record.dueDate)} (Current)` });
+  if (advancePending > 0)
+    arr.push({ type: "advance", monthYear: null, key: "advance", maxAmount: advancePending, label: "Advance Amount" });
   return arr;
+}
+
+function mergeAdvanceIntoDueItems(items = [], rentItems = []) {
+  if (!Array.isArray(items) || !Array.isArray(rentItems) || rentItems.length === 0) return items;
+  const rentMap = new Map();
+  rentItems.forEach((item) => {
+    if (item?.tenant?._id) rentMap.set(item.tenant._id.toString(), item);
+  });
+  return items.map((item) => {
+    const tenantId = item?.tenant?._id?.toString();
+    const rentInfo = tenantId ? rentMap.get(tenantId) : null;
+    if (!rentInfo) return item;
+    const advanceAmount = Number(item.advanceAmount ?? item.tenant?.advanceAmount ?? rentInfo.advanceAmount ?? rentInfo.tenant?.advanceAmount ?? 0);
+    const paidadvanceAmount = Number(item.paidadvanceAmount ?? item.tenant?.paidadvanceAmount ?? rentInfo.paidadvanceAmount ?? rentInfo.tenant?.paidadvanceAmount ?? 0);
+    const advancePending = Math.max(0, Number(item.advancePending ?? rentInfo.advancePending ?? (advanceAmount - paidadvanceAmount)));
+    return {
+      ...item,
+      advanceAmount,
+      paidadvanceAmount,
+      advancePending,
+      totalAccumulatedDue: Number(item.totalAccumulatedDue || 0) + (item.advancePending == null ? advancePending : 0),
+      tenant: {
+        ...item.tenant,
+        advanceAmount,
+        paidadvanceAmount,
+        advancePending,
+      },
+    };
+  });
 }
 
 function buildWAMessage(tenant, record, totalAccumulatedDue, buildingDetails, pendingMonths = [], isOverdue = false, daysOverdue = null, daysUntilDue = null) {
@@ -59,68 +113,63 @@ function buildWAMessage(tenant, record, totalAccumulatedDue, buildingDetails, pe
   
   let message = "";
   
-  if (hasPreviousPending) {
-    const arrearsTotal = pendingMonths.reduce((sum, pm) => sum + (pm.rentAmount - pm.paidAmount), 0);
-    message = `🚨 *URGENT: RENT ARREARS ALERT* 🚨\n\n`;
-    message += `Hello ${tenant.name},\n\n`;
-    message += `❌ *You have ${pendingMonths.length} month(s) of unpaid rent!*\n\n`;
-    message += `━━━━━━━━━━━━━━━━━━━━\n`;
-    message += `📋 *OUTSTANDING BREAKDOWN*\n`;
-    message += `━━━━━━━━━━━━━━━━━━━━\n\n`;
-    message += `*Previous Months Arrears:*\n`;
-    pendingMonths.forEach((pm, idx) => {
-      const pmRemaining = pm.rentAmount - pm.paidAmount;
-      const pmMonth = new Date(pm.dueDate).toLocaleString("en-IN", { month: "long", year: "numeric" });
-      message += `📆 ${pmMonth}: ₹${pmRemaining.toLocaleString('en-IN')}\n`;
-    });
-    message += `\n📌 *Current Month (${month}):* ₹${remainingCurrent.toLocaleString('en-IN')}\n`;
-    message += `━━━━━━━━━━━━━━━━━━━━\n`;
-    message += `💰 *TOTAL DUE:* ₹${totalAccumulatedDue.toLocaleString('en-IN')}\n`;
-    message += `━━━━━━━━━━━━━━━━━━━━\n\n`;
-    message += `⚠️ *IMMEDIATE ACTION REQUIRED*\n`;
-    message += `Please clear all pending dues at the earliest to avoid\n`;
-    message += `- Late payment penalties\n`;
-    message += `- Service interruption\n\n`;
-    message += `📍 Location: ${room}\n`;
-    message += `📞 Contact: ${tenant.phone || 'your manager'}\n\n`;
-    message += `Thank you for your prompt attention.`;
-  } else if (isOverdue) {
-    message = `⚠️ *RENT OVERDUE ALERT* ⚠️\n\n`;
-    message += `Hello ${tenant.name},\n\n`;
-    message += `Your rent payment for *${month}* is *OVERDUE by ${daysOverdue} day(s)*!\n\n`;
-    message += `━━━━━━━━━━━━━━━━━━━━\n`;
-    message += `💰 *Due Amount:* ₹${remainingCurrent.toLocaleString('en-IN')}\n`;
-    message += `📍 *Location:* ${room}\n`;
-    message += `━━━━━━━━━━━━━━━━━━━━\n\n`;
-    message += `Please make the payment immediately to avoid late fees.\n\n`;
-    message += `📞 For assistance: ${tenant.phone || 'Contact manager'}\n\n`;
-    message += `Thank you for your cooperation.`;
-  } else if (daysUntilDue !== null && daysUntilDue <= 2) {
-    const urgencyText = daysUntilDue === 0 ? "TODAY" : `in ${daysUntilDue} day(s)`;
-    message = `🔔 *RENT REMINDER* 🔔\n\n`;
-    message += `Hello ${tenant.name},\n\n`;
-    message += `This is a friendly reminder that your rent for *${month}* is due ${urgencyText}.\n\n`;
-    message += `━━━━━━━━━━━━━━━━━━━━\n`;
-    message += `💰 *Amount Due:* ₹${remainingCurrent.toLocaleString('en-IN')}\n`;
-    message += `📍 *Location:* ${room}\n`;
-    message += `━━━━━━━━━━━━━━━━━━━━\n\n`;
-    message += `Please ensure timely payment to avoid any inconvenience.\n\n`;
-    message += `✨ Thank you for your prompt attention!`;
-  } else {
-    message = `🏠 *Rent Payment Reminder* 🏠\n\n`;
-    message += `Hello ${tenant.name},\n\n`;
-    message += `Your rent for *${month}* of ₹${remainingCurrent.toLocaleString('en-IN')} is due soon.\n\n`;
-    message += `━━━━━━━━━━━━━━━━━━━━\n`;
-    message += `📍 *Room:* ${room}\n`;
-    message += `💰 *Amount:* ₹${remainingCurrent.toLocaleString('en-IN')}\n`;
-    message += `━━━━━━━━━━━━━━━━━━━━\n\n`;
-    message += `Please make the payment at your earliest convenience.\n\n`;
-    message += `🙏 Thank you!`;
-  }
+if (hasPreviousPending) {
+  const arrearsTotal = pendingMonths.reduce((sum, pm) => sum + (pm.rentAmount - pm.paidAmount), 0);
+  message = `*URGENT: RENT ARREARS ALERT*\n\n`;
+  message += `Hello ${tenant.name},\n\n`;
+  message += `*You have ${pendingMonths.length} month(s) of unpaid rent!*\n\n`;
+  message += `━━━━━━━━━━━━━━━━━━━━\n`;
+  message += `*OUTSTANDING BREAKDOWN*\n`;
+  message += `━━━━━━━━━━━━━━━━━━━━\n\n`;
+  message += `*Previous Months Arrears:*\n`;
+  pendingMonths.forEach((pm, idx) => {
+    const pmRemaining = pm.rentAmount - pm.paidAmount;
+    const pmMonth = new Date(pm.dueDate).toLocaleString("en-IN", { month: "long", year: "numeric" });
+    message += `${pmMonth}: ₹${pmRemaining.toLocaleString('en-IN')}\n`;
+  });
+  message += `\n*Current Month (${month}):* ₹${remainingCurrent.toLocaleString('en-IN')}\n`;
+  message += `━━━━━━━━━━━━━━━━━━━━\n`;
+  message += `*TOTAL DUE:* ₹${totalAccumulatedDue.toLocaleString('en-IN')}\n`;
+  message += `━━━━━━━━━━━━━━━━━━━━\n\n`;
+  message += `*IMMEDIATE ACTION REQUIRED*\n`;
+  message += `Please clear all pending dues at the earliest to avoid\n`;
+  message += `*Room Location:* ${room}\n`;
+  message += `Thank you for your prompt attention.`;
+} else if (isOverdue) {
+  message = `*RENT OVERDUE ALERT*\n\n`;
+  message += `Hello ${tenant.name},\n\n`;
+  message += `Your rent payment for *${month}* is *OVERDUE by ${daysOverdue} day(s)*!\n\n`;
+  message += `━━━━━━━━━━━━━━━━━━━━\n`;
+  message += `*Due Amount:* ₹${remainingCurrent.toLocaleString('en-IN')}\n`;
+  message += `*Room Location:* ${room}\n`;
+  message += `━━━━━━━━━━━━━━━━━━━━\n\n`;
+  message += `Please make the payment immediately to avoid late fees.\n\n`;
+  message += `Thank you for your cooperation.`;
+} else if (daysUntilDue !== null && daysUntilDue <= 2) {
+  const urgencyText = daysUntilDue === 0 ? "TODAY" : `in ${daysUntilDue} day(s)`;
+  message = `*RENT REMINDER*\n\n`;
+  message += `Hello ${tenant.name},\n\n`;
+  message += `This is a friendly reminder that your rent for *${month}* is due ${urgencyText}.\n\n`;
+  message += `━━━━━━━━━━━━━━━━━━━━\n`;
+  message += `*Amount Due:* ₹${remainingCurrent.toLocaleString('en-IN')}\n`;
+  message += `*Room Location:* ${room}\n`;
+  message += `━━━━━━━━━━━━━━━━━━━━\n\n`;
+  message += `Please ensure timely payment to avoid any inconvenience.\n\n`;
+  message += `Thank you for your prompt attention!`;
+} else {
+  message = `*Rent Payment Reminder*\n\n`;
+  message += `Hello ${tenant.name},\n\n`;
+  message += `Your rent for *${month}* of ₹${remainingCurrent.toLocaleString('en-IN')} is due soon.\n\n`;
+  message += `━━━━━━━━━━━━━━━━━━━━\n`;
+  message += `*Room Location:* ${room}\n`;
+  message += `*Amount:* ₹${remainingCurrent.toLocaleString('en-IN')}\n`;
+  message += `━━━━━━━━━━━━━━━━━━━━\n\n`;
+  message += `Please make the payment at your earliest convenience.\n\n`;
+  message += `Thank you!`;
+}
   
   message += `\n\n━━━━━━━━━━━━━━━━━━━━\n💳 *Payment Options:*\n`;
-  message += `• UPI / Bank Transfer\n`;
-  message += `• Cash at office\n`;
+  message += `• Contact your Hostel Manager\n`;
   message += `━━━━━━━━━━━━━━━━━━━━\n\n`;
   message += `*This is an automated message from your hostel management.*`;
   
@@ -489,8 +538,16 @@ function DueCard({ item, onSelect, onPayNow }) {
   const { tenant, record, remaining, isOverdue, daysOverdue, daysUntilDue, pendingMonths, totalAccumulatedDue, hasPreviousPending, pendingMonthsCount } = item;
   const alloc = tenant.allocationInfo || {};
   const phone = tenant.phone?.replace(/\D/g, "");
-  const payable = buildPayable(pendingMonths, record, remaining);
   const passportPhoto = tenant.documents?.passportPhoto;
+  const advanceAmount = Number(item.advanceAmount ?? tenant.advanceAmount ?? 0);
+  const paidAdvanceAmount = Number(item.paidadvanceAmount ?? tenant.paidadvanceAmount ?? 0);
+  const advancePending = Math.max(0, Number(item.advancePending ?? tenant.advancePending ?? (advanceAmount - paidAdvanceAmount)));
+  const displayAdvanceAmount = advanceAmount > 0 ? advanceAmount : paidAdvanceAmount + advancePending;
+  const payable = buildPayable(pendingMonths, record, remaining, advancePending);
+  const payableWithAdvance = advancePending > 0 && !payable.some((p) => p.type === "advance")
+    ? [...payable, { type: "advance", monthYear: null, key: "advance", maxAmount: advancePending, label: "Advance Amount" }]
+    : payable;
+  const displayTotalDue = Number(totalAccumulatedDue || 0) + (item.advancePending == null ? advancePending : 0);
   const [showProfilePopup, setShowProfilePopup] = useState(false);
   const [showBillModal, setShowBillModal] = useState(false);
 
@@ -565,12 +622,13 @@ const handleWA = (e) => {
           <div className="flex flex-wrap gap-1.5 mb-3">
             {alloc.buildingName && <span className="text-[11px] px-2 py-0.5 rounded-md bg-gray-100 border border-gray-200 text-gray-600">🏢 {alloc.buildingName}</span>}
             {alloc.roomNumber   && <span className="text-[11px] px-2 py-0.5 rounded-md bg-gray-100 border border-gray-200 text-gray-600">🚪 Room {alloc.roomNumber}</span>}
+            <AdvanceBadge expected={displayAdvanceAmount} paid={paidAdvanceAmount} size="sm" />
           </div>
 
           <div className="flex items-end justify-between">
             <div>
               <p className="text-gray-400 text-[11px] uppercase tracking-wide">Total Accumulated Due</p>
-              <p className={`text-2xl font-black ${hasPreviousPending ? "text-rose-600" : "text-gray-900"}`}>{fmt(totalAccumulatedDue)}</p>
+              <p className={`text-2xl font-black ${hasPreviousPending ? "text-rose-600" : "text-gray-900"}`}>{fmt(displayTotalDue)}</p>
             </div>
             <div className="text-right">
               {isOverdue
@@ -595,13 +653,13 @@ const handleWA = (e) => {
 
           <div className="mt-3 flex gap-2">
             <button
-              onClick={(e) => { e.stopPropagation(); onPayNow(tenant._id, payable, payable[0]?.monthYear); }}
-              disabled={payable.length === 0}
+              onClick={(e) => { e.stopPropagation(); onPayNow(tenant._id, payableWithAdvance, payableWithAdvance[0]?.monthYear); }}
+              disabled={payableWithAdvance.length === 0}
               className={`flex-1 py-2 rounded-xl font-bold text-sm text-white transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed ${hasPreviousPending ? "bg-rose-500 hover:bg-rose-600 active:scale-95" : "bg-amber-500 hover:bg-amber-600 active:scale-95"}`}
             >
               {hasPreviousPending ? "Pay Dues" : "Pay Now"}
             </button>
-            <EmailReminderButton tenantId={tenant._id} tenantEmail={tenant.email} hasPreviousPending={hasPreviousPending} pendingMonthsCount={pendingMonthsCount} className="shrink-0 px-3" />
+            <EmailReminderButton tenantId={tenant._id} tenantEmail={tenant.email} hasPreviousPending={hasPreviousPending || advancePending > 0} pendingMonthsCount={pendingMonthsCount} className="shrink-0 px-3" />
           </div>
         </div>
       </div>
@@ -766,6 +824,7 @@ function TenantDetailModal({ tenantId, onClose, onPayNow, onPaymentDone, onTenan
         permanentAddress: t.permanentAddress || "",
         joiningDate: t.joiningDate ? t.joiningDate.slice(0, 10) : "",
         rentAmount: t.rentAmount || "",
+        advanceAmount: t.advanceAmount || "",
       });
     }
   }, [data]);
@@ -784,6 +843,7 @@ function TenantDetailModal({ tenantId, onClose, onPayNow, onPaymentDone, onTenan
       formData.append("permanentAddress", editForm.permanentAddress);
       formData.append("joiningDate", editForm.joiningDate);
       formData.append("rentAmount", editForm.rentAmount);
+      formData.append("advanceAmount", editForm.advanceAmount || "0");
       if (docFiles.aadharFront)   formData.append("aadharFront",   docFiles.aadharFront);
       if (docFiles.aadharBack)    formData.append("aadharBack",    docFiles.aadharBack);
       if (docFiles.passportPhoto) formData.append("passportPhoto", docFiles.passportPhoto);
@@ -832,10 +892,12 @@ function TenantDetailModal({ tenantId, onClose, onPayNow, onPaymentDone, onTenan
 
   if (!data && !loading) return null;
 
-  const { tenant, buildingDetails, currentRecord, remaining, history, pendingMonths, arrearsTotal, totalAccumulatedDue, hasPreviousPending, pendingMonthsCount } = data || {};
+  const { tenant, buildingDetails, currentRecord, remaining, history, pendingMonths, arrearsTotal, totalAccumulatedDue, hasPreviousPending, pendingMonthsCount, advancePending = 0 } = data || {};
   const phone = tenant?.phone?.replace(/\D/g, "");
-  const payable = buildPayable(pendingMonths, currentRecord, remaining);
+  const payable = buildPayable(pendingMonths, currentRecord, remaining, advancePending);
   const passportPhoto = tenant?.documents?.passportPhoto;
+  const advanceAmount = Number(tenant?.advanceAmount || 0);
+  const paidAdvanceAmount = Number(tenant?.paidadvanceAmount || 0);
   const handleViewDocument = (docUrl) => { if (docUrl) setViewingDoc(docUrl); };
   const inputClass = "w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-gray-900 text-sm focus:outline-none focus:border-amber-400 transition-colors";
 
@@ -909,6 +971,9 @@ function TenantDetailModal({ tenantId, onClose, onPayNow, onPaymentDone, onTenan
                 <div className="flex-1 min-w-0">
                   <h3 className="text-gray-900 font-bold text-lg sm:text-xl truncate">{tenant?.name}</h3>
                   <p className="text-gray-500 text-sm truncate">{tenant?.email || "No email on record"}</p>
+                  <div className="mt-2">
+                    <AdvanceBadge expected={advanceAmount} paid={paidAdvanceAmount} />
+                  </div>
                   <div className="flex flex-wrap gap-2 mt-2">
 <button 
   onClick={() => window.open(`https://wa.me/91${phone}?text=${buildWAMessage(
@@ -926,7 +991,7 @@ function TenantDetailModal({ tenantId, onClose, onPayNow, onPaymentDone, onTenan
   📱 WhatsApp
 </button>
                     <a href={`tel:${tenant?.phone}`} className="flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold bg-blue-50 hover:bg-blue-600 border border-blue-200 text-blue-700 hover:text-white transition-colors">📞 Call</a>
-                    {(currentRecord?.status !== "Paid" || hasPreviousPending) && <EmailReminderButton tenantId={tenant?._id} tenantEmail={tenant?.email} hasPreviousPending={hasPreviousPending} pendingMonthsCount={pendingMonthsCount} />}
+                    {(currentRecord?.status !== "Paid" || hasPreviousPending || advancePending > 0) && <EmailReminderButton tenantId={tenant?._id} tenantEmail={tenant?.email} hasPreviousPending={hasPreviousPending || advancePending > 0} pendingMonthsCount={pendingMonthsCount} />}
                   </div>
                 </div>
                 <div className="text-right shrink-0 hidden sm:block">
@@ -954,6 +1019,7 @@ function TenantDetailModal({ tenantId, onClose, onPayNow, onPaymentDone, onTenan
                   <div><label className="text-gray-500 text-[11px] uppercase tracking-wide">Phone *</label><input type="tel" value={editForm.phone} onChange={(e) => handleEditField("phone", e.target.value)} className={inputClass} placeholder="Phone number" /></div>
                   <div><label className="text-gray-500 text-[11px] uppercase tracking-wide">Email</label><input type="email" value={editForm.email} onChange={(e) => handleEditField("email", e.target.value)} className={inputClass} placeholder="Email address" /></div>
                   <div><label className="text-gray-500 text-[11px] uppercase tracking-wide">Monthly Rent (₹) *</label><input type="number" value={editForm.rentAmount} onChange={(e) => handleEditField("rentAmount", e.target.value)} className={inputClass} placeholder="Rent amount" /></div>
+                  <div><label className="text-gray-500 text-[11px] uppercase tracking-wide">Advance Amount</label><input type="number" value={editForm.advanceAmount} onChange={(e) => handleEditField("advanceAmount", e.target.value)} className={inputClass} placeholder="Advance amount" min="0" /></div>
                   <div><label className="text-gray-500 text-[11px] uppercase tracking-wide">Joining Date</label><input type="date" value={editForm.joiningDate} onChange={(e) => handleEditField("joiningDate", e.target.value)} className={inputClass} /></div>
                   <div><label className="text-gray-500 text-[11px] uppercase tracking-wide">Permanent Address</label><input type="text" value={editForm.permanentAddress} onChange={(e) => handleEditField("permanentAddress", e.target.value)} className={inputClass} placeholder="Permanent address" /></div>
                 </div>
@@ -1046,6 +1112,9 @@ function TenantDetailModal({ tenantId, onClose, onPayNow, onPaymentDone, onTenan
                   ["Phone", tenant?.phone],
                   ["Joining Date", fmtDate(tenant?.joiningDate)],
                   ["Monthly Rent", fmt(tenant?.rentAmount)],
+                  ["Advance Expected", advanceAmount > 0 ? fmt(advanceAmount) : null],
+                  ["Advance Paid", advanceAmount > 0 ? fmt(paidAdvanceAmount) : null],
+                  ["Advance Pending", advanceAmount > 0 ? fmt(advancePending) : null],
                   ["Permanent Address", tenant?.permanentAddress],
                   buildingDetails && ["Building", buildingDetails.buildingName],
                   buildingDetails && ["Floor", `Floor ${buildingDetails.floorNumber}`],
@@ -1083,7 +1152,7 @@ function TenantDetailModal({ tenantId, onClose, onPayNow, onPaymentDone, onTenan
                     <p className="text-gray-900 font-bold text-lg">{currentRecord ? fmtMonthYear(currentRecord.dueDate) : "—"}</p>
                     <p className="text-gray-500 text-xs">Due: {fmtDate(currentRecord?.dueDate)}</p>
                   </div>
-                  {currentRecord?.status !== "Paid" && (
+                  {(currentRecord?.status !== "Paid" || advancePending > 0) && (
                     <button onClick={() => onPayNow(tenant._id, payable, currentRecord?.monthYear)} className="px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-sm active:scale-95 transition-all">Pay Now</button>
                   )}
                 </div>
@@ -1111,7 +1180,7 @@ function TenantDetailModal({ tenantId, onClose, onPayNow, onPaymentDone, onTenan
                           </div>
                           <div className="flex items-center justify-between sm:justify-end gap-2 shrink-0">
                             <div className="text-left sm:text-right">{pill(rec.status)}<p className="text-gray-500 text-xs mt-1">{fmt(rec.paidAmount)} / {fmt(rec.rentAmount)}</p></div>
-                            {isPending && <button onClick={() => onPayNow(tenant._id, [{ monthYear: rec.monthYear, maxAmount: recRemaining, label: fmtMonthYear(rec.dueDate) }], rec.monthYear)} className="text-[10px] px-2 py-1 rounded-lg bg-rose-500 hover:bg-rose-600 text-white font-bold transition-colors shrink-0">Pay {fmt(recRemaining)}</button>}
+                            {isPending && <button onClick={() => onPayNow(tenant._id, [{ type: "rent", monthYear: rec.monthYear, key: `rent:${rec.monthYear}`, maxAmount: recRemaining, label: fmtMonthYear(rec.dueDate) }], rec.monthYear)} className="text-[10px] px-2 py-1 rounded-lg bg-rose-500 hover:bg-rose-600 text-white font-bold transition-colors shrink-0">Pay {fmt(recRemaining)}</button>}
                           </div>
                         </div>
                       );
@@ -1139,9 +1208,12 @@ function TenantDetailModal({ tenantId, onClose, onPayNow, onPaymentDone, onTenan
 
 // ─── Pay Modal ────────────────────────────────────────────────────────────────
 function PayModal({ tenantId, payableMonths, initialMonthYear, onClose, onSuccess }) {
-  const [selectedMonth, setSelectedMonth] = useState(initialMonthYear || payableMonths[0]?.monthYear);
-  const selectedOption = payableMonths.find((m) => m.monthYear === selectedMonth);
+  const requestedKey = initialMonthYear ? `rent:${initialMonthYear}` : payableMonths[0]?.key;
+  const initialKey = payableMonths.some((m) => m.key === requestedKey) ? requestedKey : payableMonths[0]?.key;
+  const [selectedKey, setSelectedKey] = useState(initialKey);
+  const selectedOption = payableMonths.find((m) => m.key === selectedKey);
   const maxAmount = selectedOption ? selectedOption.maxAmount : 0;
+  const isAdvancePay = selectedOption?.type === "advance";
   const [amount, setAmount] = useState(maxAmount || "");
   const [note, setNote] = useState("");
   const [loading, setLoading] = useState(false);
@@ -1149,15 +1221,27 @@ function PayModal({ tenantId, payableMonths, initialMonthYear, onClose, onSucces
   const inputRef = useRef(null);
 
   useEffect(() => { inputRef.current?.focus(); }, []);
-  useEffect(() => { if (selectedOption) setAmount(selectedOption.maxAmount); setError(""); }, [selectedMonth]);
+  useEffect(() => { if (selectedOption) setAmount(selectedOption.maxAmount); setError(""); }, [selectedKey]);
 
   const handlePay = async () => {
     const val = Number(amount);
     if (!val || val <= 0) return setError("Enter a valid amount.");
     if (val > maxAmount) return setError(`Amount cannot exceed remaining due of ${fmt(maxAmount)}.`);
+    const isAdvanceSelection = selectedKey === "advance" || selectedOption?.type === "advance";
     setLoading(true); setError("");
     try {
-      const r = await fetch(`${API}/rent/pay`, { method: "POST", headers: authHeader(), body: JSON.stringify({ tenantId, amount: val, note, monthYear: selectedMonth }) });
+      const r = await fetch(`${API}/rent/pay`, {
+        method: "POST",
+        headers: authHeader(),
+        body: JSON.stringify({
+          tenantId,
+          amount: val,
+          note,
+          monthYear: isAdvanceSelection ? "advance" : selectedOption?.monthYear,
+          paymentType: isAdvanceSelection ? "advance" : "rent",
+          paymentKey: selectedKey,
+        }),
+      });
       const d = await r.json();
       if (!r.ok) throw new Error(d.message);
       onSuccess(d);
@@ -1176,19 +1260,19 @@ function PayModal({ tenantId, payableMonths, initialMonthYear, onClose, onSucces
         <div className="p-6 space-y-4">
           {payableMonths.length > 1 ? (
             <div>
-              <label className="block text-gray-600 text-xs uppercase tracking-wide mb-1.5">Select Month to Pay</label>
-              <select value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-gray-900 text-sm font-bold focus:outline-none focus:border-amber-400">
-                {payableMonths.map((m) => <option key={m.monthYear} value={m.monthYear}>{m.label} — {fmt(m.maxAmount)}</option>)}
+              <label className="block text-gray-600 text-xs uppercase tracking-wide mb-1.5">Select Month / Advance to Pay</label>
+              <select value={selectedKey} onChange={(e) => setSelectedKey(e.target.value)} className="w-full bg-gray-50 border border-amber-300 rounded-xl px-4 py-3 text-gray-900 text-sm font-bold focus:outline-none focus:border-amber-500">
+                {payableMonths.map((m) => <option key={m.key} value={m.key}>{m.label} — {fmt(m.maxAmount)}</option>)}
               </select>
             </div>
           ) : (
             <div><p className="text-gray-500 text-xs uppercase tracking-wide mb-1">Paying For</p><p className="text-gray-900 text-lg font-bold">{selectedOption?.label}</p></div>
           )}
-          <div><p className="text-gray-500 text-xs uppercase tracking-wide mb-1">Remaining Due</p><p className="text-3xl font-black text-amber-600">{fmt(maxAmount)}</p></div>
+          <div><p className="text-gray-500 text-xs uppercase tracking-wide mb-1">{isAdvancePay ? "Pending Advance" : "Remaining Due"}</p><p className={`text-3xl font-black ${isAdvancePay ? "text-orange-600" : "text-amber-600"}`}>{fmt(maxAmount)}</p></div>
           <div><label className="block text-gray-600 text-xs uppercase tracking-wide mb-1.5">Amount Paid (₹)</label><input ref={inputRef} type="number" value={amount} onChange={(e) => setAmount(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handlePay()} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-gray-900 text-lg font-bold focus:outline-none focus:border-amber-400" min="1" max={maxAmount} /></div>
           <div><label className="block text-gray-600 text-xs uppercase tracking-wide mb-1.5">Note (optional)</label><input type="text" value={note} onChange={(e) => setNote(e.target.value)} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-gray-900 text-sm focus:outline-none focus:border-amber-400" placeholder="Cash, UPI, etc." /></div>
           {error && <p className="text-rose-600 text-sm bg-rose-50 border border-rose-200 rounded-lg px-3 py-2">{error}</p>}
-          <button onClick={handlePay} disabled={loading} className="w-full py-3 rounded-xl font-bold text-white bg-amber-500 hover:bg-amber-600 disabled:opacity-50 disabled:cursor-not-allowed active:scale-95 transition-all text-base">{loading ? "Processing…" : "Confirm Payment"}</button>
+          <button onClick={handlePay} disabled={loading} className={`w-full py-3 rounded-xl font-bold text-white disabled:opacity-50 disabled:cursor-not-allowed active:scale-95 transition-all text-base ${isAdvancePay ? "bg-orange-500 hover:bg-orange-600" : "bg-amber-500 hover:bg-amber-600"}`}>{loading ? "Processing…" : "Confirm Payment"}</button>
         </div>
       </div>
     </div>
@@ -1374,6 +1458,36 @@ function LocationFilter({ dueItems, onFilterChange }) {
 }
 
 // ─── Pagination Controls ──────────────────────────────────────────────────────
+function PaymentStatusFilter({ value, onChange }) {
+  const options = [
+    { value: "all", label: "All" },
+    { value: "previous_overdues", label: "Previous months overdues" },
+    { value: "advance_pending", label: "Advance pending" },
+    { value: "current_month_dues", label: "Current month dues" },
+    { value: "upcoming_dues", label: "Upcoming dues" },
+  ];
+
+  return (
+    <div className="mb-4 p-4 rounded-2xl border border-gray-200 bg-white">
+      <div className="grid grid-cols-1 sm:grid-cols-[1fr_360px] gap-3 items-center">
+        <div>
+          <p className="text-gray-600 text-xs font-bold uppercase tracking-wide">Payment Status</p>
+          <p className="text-gray-400 text-xs mt-1">Choose which rent records to fetch</p>
+        </div>
+        <select
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          className="w-full rounded-xl border border-amber-300 bg-white px-4 py-3 text-sm font-semibold text-gray-900 focus:outline-none focus:border-amber-500"
+        >
+          {options.map((option) => (
+            <option key={option.value} value={option.value}>{option.label}</option>
+          ))}
+        </select>
+      </div>
+    </div>
+  );
+}
+
 function Pagination({ page, totalPages, total, limit, onPageChange, loading }) {
   if (totalPages <= 1) return null;
   const start = (page - 1) * limit + 1;
@@ -1425,6 +1539,7 @@ export default function RentManagement() {
   const searchDebounceRef = useRef(null);
 
   const [locationFilter, setLocationFilter] = useState({ building: "", floor: "", room: "" });
+  const [paymentStatusFilter, setPaymentStatusFilter] = useState("all");
 
 
 
@@ -1452,7 +1567,9 @@ export default function RentManagement() {
           return d.data || [];
         })
       );
-      const allData = [...(firstData.data || []), ...rest.flat()];
+      const rr = await fetch(`${API}/rent/all`, { headers: authHeader() });
+      const rentAll = await rr.json();
+      const allData = mergeAdvanceIntoDueItems([...(firstData.data || []), ...rest.flat()], Array.isArray(rentAll) ? rentAll : []);
       const rooms = new Set();
       allData.forEach(item => {
         if (item.tenant?.allocationInfo?.roomNumber) {
@@ -1481,10 +1598,12 @@ export default function RentManagement() {
   const loadDuePage = useCallback(async (pageNum = 1) => {
     setDueLoading(true);
     try {
-      const r = await fetch(`${API}/rent/due?page=${pageNum}&limit=${PAGE_LIMIT}`, { headers: authHeader() });
-      const d = await r.json();
+      const [d, rentAll] = await Promise.all([
+        fetch(`${API}/rent/due?page=${pageNum}&limit=${PAGE_LIMIT}`, { headers: authHeader() }).then((r) => r.json()),
+        fetch(`${API}/rent/all`, { headers: authHeader() }).then((r) => r.json()).catch(() => []),
+      ]);
       if (d.data) {
-        setDueItems(d.data);
+        setDueItems(mergeAdvanceIntoDueItems(d.data, Array.isArray(rentAll) ? rentAll : []));
         setPage(d.page);
         setTotalPages(d.totalPages);
         setTotal(d.total);
@@ -1564,30 +1683,52 @@ export default function RentManagement() {
     });
   };
 
-  const getFilteredItems = useCallback(() => {
-    if (!locationFilter.building && !locationFilter.floor && !locationFilter.room) {
-      return null;
-    }
-    return applyLocationFilter(allDueItemsForFilter);
-  }, [locationFilter, allDueItemsForFilter]);
+  const getAdvancePendingForItem = (item) => {
+    const tenant = item?.tenant || {};
+    const advanceAmount = Number(item?.advanceAmount ?? tenant.advanceAmount ?? 0);
+    const paidAdvanceAmount = Number(item?.paidadvanceAmount ?? tenant.paidadvanceAmount ?? 0);
+    return Math.max(0, Number(item?.advancePending ?? tenant.advancePending ?? (advanceAmount - paidAdvanceAmount)));
+  };
 
-  const filteredItems = getFilteredItems();
+  const applyPaymentStatusFilter = (items) => {
+    if (paymentStatusFilter === "all") return items;
+    return items.filter((item) => {
+      const remainingAmount = Number(item.remaining ?? ((item.record?.rentAmount || 0) - (item.record?.paidAmount || 0)));
+      if (paymentStatusFilter === "previous_overdues") {
+        return !!item.hasPreviousPending || (item.pendingMonths || []).some((pm) => (pm.rentAmount || 0) - (pm.paidAmount || 0) > 0);
+      }
+      if (paymentStatusFilter === "advance_pending") {
+        return getAdvancePendingForItem(item) > 0;
+      }
+      if (paymentStatusFilter === "current_month_dues") {
+        return remainingAmount > 0 && (item.isOverdue || item.daysUntilDue === 0);
+      }
+      if (paymentStatusFilter === "upcoming_dues") {
+        return remainingAmount > 0 && item.daysUntilDue !== null && item.daysUntilDue > 0;
+      }
+      return true;
+    });
+  };
+
   const isSearchMode     = searchResults !== null;
-  const isFilterMode     = !!(locationFilter.building || locationFilter.floor || locationFilter.room);
+  const isLocationFilterMode = !!(locationFilter.building || locationFilter.floor || locationFilter.room);
+  const isPaymentFilterMode = paymentStatusFilter !== "all";
+  const isFilterMode     = isLocationFilterMode || isPaymentFilterMode;
   const statsLoading     = dueLoading && dueItems.length === 0;
 
   let baseItems;
   if (isSearchMode) {
     baseItems = searchResults || [];
-  } else if (isFilterMode && filteredItems) {
-    baseItems = filteredItems;
+  } else if (isFilterMode) {
+    baseItems = allDueItemsForFilter;
   } else {
     baseItems = dueItems;
   }
 
-  const displayItems = baseItems;
+  const locationFilteredItems = isLocationFilterMode ? applyLocationFilter(baseItems) : baseItems;
+  const displayItems = applyPaymentStatusFilter(locationFilteredItems);
   const filterSourceItems = isSearchMode ? (searchResults || []) : allDueItemsForFilter;
-  const filteredCount = isFilterMode && filteredItems ? filteredItems.length : 0;
+  const filteredCount = isFilterMode ? displayItems.length : 0;
 
   return (
     <div className="min-h-screen bg-gray-50 text-gray-900 font-sans">
@@ -1680,6 +1821,14 @@ export default function RentManagement() {
               )}
             </div>
           </div>
+
+          <PaymentStatusFilter
+            value={paymentStatusFilter}
+            onChange={(value) => {
+              setPaymentStatusFilter(value);
+              setPage(1);
+            }}
+          />
 
           {/* Location Filter Row */}
           {!dueLoading && !filterLoading && filterSourceItems.length > 0 && (
