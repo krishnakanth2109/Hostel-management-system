@@ -3,9 +3,15 @@ import { API, authHeaders } from "../api.js";
 import { useToast, Toast, Btn, inputStyle } from "../components/ui.jsx";
 import Swal from "sweetalert2";
 
+const todayDateValue = () => {
+  const date = new Date();
+  date.setMinutes(date.getMinutes() - date.getTimezoneOffset());
+  return date.toISOString().slice(0, 10);
+};
+
 const INIT = {
   name: "", phone: "", email: "", fatherName: "", fatherPhone: "",
-  permanentAddress: "", joiningDate: new Date().toISOString().split("T")[0],
+  permanentAddress: "", joiningDate: todayDateValue(),
   rentAmount: "", advanceAmount: "",
 };
 
@@ -156,6 +162,11 @@ if (form.emailError) {
 
   if (!joiningDate) {
     Swal.fire("Validation Error", "Please select joining date", "warning");
+    return false;
+  }
+
+  if (joiningDate > todayDateValue()) {
+    Swal.fire("Validation Error", "Future joining dates are not allowed", "warning");
     return false;
   }
 
@@ -561,6 +572,7 @@ if (form.emailError) {
                   type="date" 
                   value={form.joiningDate} 
                   onChange={(e) => setForm({ ...form, joiningDate: e.target.value })} 
+                  max={todayDateValue()}
                 />
               </div>
               <div>

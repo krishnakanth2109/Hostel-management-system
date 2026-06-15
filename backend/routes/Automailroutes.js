@@ -124,6 +124,30 @@ function createMonthlyPayment(tenant, monthYear, dueDate) {
   };
 }
 
+function getRemainingAmount(record) {
+  return Math.max(0, Number(record.rentAmount || 0) - Number(record.paidAmount || 0));
+}
+
+function refreshPaymentStatus(record) {
+  const remaining = getRemainingAmount(record);
+  if (remaining <= 0) record.status = "Paid";
+  else if (Number(record.paidAmount || 0) > 0) record.status = "Partial";
+  else record.status = "Due";
+}
+
+function syncMonthlyPaymentRent(record, tenant) {
+  if (!record) return false;
+  const expectedRent = Number(tenant.rentAmount || 0);
+  if (!Number.isFinite(expectedRent) || expectedRent <= 0) return false;
+
+  const beforeStatus = record.status;
+  const beforeRent = Number(record.rentAmount || 0);
+  if (beforeRent !== expectedRent) record.rentAmount = expectedRent;
+  refreshPaymentStatus(record);
+
+  return beforeRent !== expectedRent || beforeStatus !== record.status;
+}
+
 function monthlyPaymentToObject(record, tenantId) {
   const obj = record?.toObject ? record.toObject() : { ...record };
   return { ...obj, tenantId };
@@ -157,9 +181,11 @@ async function buildTenantSummary(tenant, ownerId, lookaheadMs = 0) {
       record = findMonthlyPayment(rentDoc, key);
       didChange = true;
     }
-    if (record.status !== "Paid") {
+    didChange = syncMonthlyPaymentRent(record, tenant) || didChange;
+    const remaining = getRemainingAmount(record);
+    if (remaining > 0) {
       pendingMonths.push(monthlyPaymentToObject(record, tenant._id));
-      arrearsTotal += record.rentAmount - record.paidAmount;
+      arrearsTotal += remaining;
     }
   }
 
@@ -170,10 +196,11 @@ async function buildTenantSummary(tenant, ownerId, lookaheadMs = 0) {
     currentRecord = findMonthlyPayment(rentDoc, currentKey);
     didChange = true;
   }
+  didChange = syncMonthlyPaymentRent(currentRecord, tenant) || didChange;
 
   if (didChange) await rentDoc.save();
 
-  const currentRemaining = currentRecord.rentAmount - currentRecord.paidAmount;
+  const currentRemaining = getRemainingAmount(currentRecord);
   const msUntilDue = currentRecord.dueDate.getTime() - now.getTime();
   const isOverdue = msUntilDue < 0;
   const daysOverdue = isOverdue ? Math.ceil(Math.abs(msUntilDue) / 86400000) : null;

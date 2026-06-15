@@ -17,6 +17,12 @@ import { useParams, Link } from "react-router-dom";
 import TenantHeader from "../components/TenantHeader.jsx";
 import { API } from "../api.js";
 
+const todayDateValue = () => {
+  const date = new Date();
+  date.setMinutes(date.getMinutes() - date.getTimezoneOffset());
+  return date.toISOString().slice(0, 10);
+};
+
 // ── Tiny field component ─────────────────────────────────────────────────────
 function Field({ label, error, required, children }) {
   return (
@@ -141,6 +147,7 @@ export default function TenantRegisterPage() {
     }
     if (step === 3) {
       if (!form.joiningDate) e.joiningDate = "Joining date is required";
+      else if (form.joiningDate > todayDateValue()) e.joiningDate = "Future joining dates are not allowed";
       if (!form.rentAmount)  e.rentAmount  = "Rent amount is required";
       else if (isNaN(Number(form.rentAmount)) || Number(form.rentAmount) <= 0)
         e.rentAmount = "Enter a valid amount";
@@ -427,7 +434,7 @@ export default function TenantRegisterPage() {
                     value={form.joiningDate}
                     onChange={set("joiningDate")}
                     error={errors.joiningDate}
-                    max={new Date().toISOString().split("T")[0]}
+                    max={todayDateValue()}
                   />
                 </Field>
 

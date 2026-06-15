@@ -179,8 +179,8 @@ if (hasPreviousPending) {
 // ─── Profile Image Popup ──────────────────────────────────────────────────────
 function ProfileImagePopup({ imageUrl, name, onClose }) {
   return (
-    <div className="fixed inset-0 z-[90] flex items-center justify-center p-4 bg-black/85 backdrop-blur-md" onClick={onClose}>
-      <div className="relative flex flex-col items-center gap-4" onClick={(e) => e.stopPropagation()}>
+    <div className="fixed inset-0 z-[90] flex items-start sm:items-center justify-center p-4 pt-24 sm:pt-4 bg-black/85 backdrop-blur-md" onClick={onClose}>
+      <div className="relative flex flex-col items-center gap-4 max-h-[calc(100dvh-6.5rem)] sm:max-h-[90vh]" onClick={(e) => e.stopPropagation()}>
         <button onClick={onClose} className="absolute -top-3 -right-3 w-8 h-8 flex items-center justify-center rounded-full bg-white/20 hover:bg-white/40 text-white text-lg font-bold transition-colors z-10 border border-white/30">✕</button>
         <div className="w-64 h-64 sm:w-80 sm:h-80 rounded-full overflow-hidden border-4 border-white/30 shadow-2xl">
           <img src={imageUrl} alt={name} className="w-full h-full object-cover" />
@@ -256,8 +256,9 @@ function EmailReminderButton({ tenantId, tenantEmail, hasPreviousPending = false
 // ─── Document Viewer ──────────────────────────────────────────────────────────
 function DocumentViewer({ imageUrl, onClose }) {
   return (
-    <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md" onClick={onClose}>
-      <div className="relative max-w-4xl max-h-[90vh] w-full" onClick={(e) => e.stopPropagation()}>
+    <div className="fixed inset-0 z-[80] flex items-start sm:items-center justify-center p-4 pt-24 sm:pt-4 bg-black/80 backdrop-blur-md" onClick={onClose}>
+      <button onClick={onClose} className="absolute right-4 top-20 sm:hidden w-10 h-10 flex items-center justify-center rounded-full bg-white/20 hover:bg-white/35 text-white text-xl border border-white/20 z-10">x</button>
+      <div className="relative max-w-4xl max-h-[calc(100dvh-6.5rem)] sm:max-h-[90vh] w-full flex flex-col gap-3" onClick={(e) => e.stopPropagation()}>
         <button onClick={onClose} className="absolute -top-12 right-0 text-white hover:text-gray-300 text-2xl">✕</button>
         <button onClick={() => window.open(imageUrl, "_blank")} className="absolute -top-12 right-12 text-white hover:text-gray-300 text-sm bg-white/20 px-3 py-1 rounded-lg">🔗 Open in new tab</button>
         <img src={imageUrl} alt="Document" className="w-full h-full object-contain rounded-lg" />
@@ -431,8 +432,8 @@ function BillPreviewModal({ item, onClose }) {
       </div>
 
       {/* ── Modal overlay ── */}
-      <div className="fixed inset-0 z-[77] flex items-center justify-center p-4 bg-black/75 backdrop-blur-md" onClick={onClose}>
-        <div className="flex flex-col items-center gap-4 w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
+      <div className="fixed inset-0 z-[77] flex items-start sm:items-center justify-center p-4 pt-24 sm:pt-4 bg-black/75 backdrop-blur-md" onClick={onClose}>
+        <div className="flex flex-col items-center gap-4 w-full max-w-sm max-h-[calc(100dvh-6.5rem)] sm:max-h-[92vh] overflow-y-auto pb-2" onClick={(e) => e.stopPropagation()}>
 
           {/* Header */}
           <div className="flex items-center justify-between w-full">
@@ -444,7 +445,7 @@ function BillPreviewModal({ item, onClose }) {
           </div>
 
           {/* Bill image preview */}
-          <div className="relative w-full rounded-2xl shadow-2xl overflow-hidden bg-white" style={{ minHeight: "180px" }}>
+          <div className="relative w-full rounded-2xl shadow-2xl overflow-y-auto bg-white max-h-[34dvh] sm:max-h-[58vh]" style={{ minHeight: "180px" }}>
             {generating && (
               <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-white z-10 rounded-2xl">
                 <div className="relative">
@@ -508,16 +509,7 @@ function BillPreviewModal({ item, onClose }) {
                 </div>
               )}
 
-              {/* Download only */}
-              {imgUrl && (
-                <button
-                  onClick={() => triggerDownload(imgUrl)}
-                  className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl font-semibold text-sm text-white/80 bg-white/15 hover:bg-white/25 border border-white/20 active:scale-95 transition-all"
-                >
-                  ⬇️ Download PNG Only
-                </button>
-              )}
-
+  
               {/* Text fallback */}
               <button
                 onClick={handleTextFallback}
@@ -525,6 +517,7 @@ function BillPreviewModal({ item, onClose }) {
               >
                 Send as plain text message instead
               </button>
+
             </div>
           )}
         </div>
@@ -578,11 +571,11 @@ const handleWA = (e) => {
           : <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-amber-500 via-amber-400 to-amber-500" />}
 
         {hasPreviousPending && (
-          <div className="absolute -top-2 -right-2 z-10">
-            <span className="relative flex h-6 w-6">
+          <div className="absolute top-2 right-2 z-20">
+            <span className="relative flex h-7 min-w-7">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75" />
-              <span className="relative inline-flex rounded-full h-6 w-6 bg-rose-600 items-center justify-center shadow-lg">
-                <span className="text-white text-[10px] font-black leading-none">{pendingMonthsCount}</span>
+              <span className="relative inline-flex rounded-full h-7 min-w-7 px-2 bg-rose-600 items-center justify-center shadow-lg ring-2 ring-white">
+                <span className="text-white text-[11px] font-black leading-none tabular-nums">{pendingMonthsCount}</span>
               </span>
             </span>
           </div>
@@ -598,7 +591,7 @@ const handleWA = (e) => {
               </div>
             </div>
             {/* ACTION BUTTONS — 📱 text WA | 📸 image bill | 📞 call */}
-            <div className="flex gap-1.5 shrink-0">
+            <div className={`flex gap-1.5 shrink-0 ${hasPreviousPending ? "pr-8" : ""}`}>
               {/* Existing text WA button */}
               <button
                 onClick={handleWA}
@@ -775,7 +768,7 @@ function VacateConfirmModal({ tenantName, onConfirm, onCancel, loading }) {
 }
 
 // ─── Tenant Detail Modal ──────────────────────────────────────────────────────
-function TenantDetailModal({ tenantId, onClose, onPayNow, onPaymentDone, onTenantUpdated }) {
+function TenantDetailModal({ tenantId, onClose, onPayNow, onPaymentDone, onTenantUpdated, onPaymentCorrected }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [viewingDoc, setViewingDoc] = useState(null);
@@ -791,6 +784,7 @@ function TenantDetailModal({ tenantId, onClose, onPayNow, onPaymentDone, onTenan
   const [showVacateConfirm, setShowVacateConfirm] = useState(false);
   const [vacating, setVacating] = useState(false);
   const [vacateError, setVacateError] = useState("");
+  const [editingPayment, setEditingPayment] = useState(null);
 
   const handleDocFileChange = (field, file) => {
     if (!file) return;
@@ -875,6 +869,19 @@ function TenantDetailModal({ tenantId, onClose, onPayNow, onPaymentDone, onTenan
     setSaving(false);
   };
 
+  const handlePaymentCorrection = async ({ monthYear, paidAmount, note }) => {
+    const r = await fetch(`${API}/rent/payment-correction`, {
+      method: "PATCH",
+      headers: authHeader(),
+      body: JSON.stringify({ tenantId, monthYear, paidAmount, note }),
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.message || "Failed to correct payment.");
+    setEditingPayment(null);
+    await load();
+    if (onPaymentCorrected) onPaymentCorrected(d.message);
+  };
+
   const handleVacate = async () => {
     setVacating(true); setVacateError("");
     try {
@@ -903,9 +910,8 @@ function TenantDetailModal({ tenantId, onClose, onPayNow, onPaymentDone, onTenan
 
   return (
     <>
-<div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4 bg-black/50 backdrop-blur-sm">
-  <div className="relative w-full sm:max-w-2xl h-[95dvh] sm:h-auto sm:max-h-[92vh] flex flex-col rounded-t-2xl sm:rounded-2xl border border-gray-200 bg-white shadow-2xl overflow-hidden">
- <br />
+<div className="fixed inset-0 z-50 flex items-start sm:items-center justify-center pt-20 sm:p-4 bg-black/50 backdrop-blur-sm">
+  <div className="relative w-full sm:max-w-2xl h-[calc(100dvh-5rem)] sm:h-auto sm:max-h-[92vh] flex flex-col rounded-t-2xl sm:rounded-2xl border border-gray-200 bg-white shadow-2xl overflow-hidden">
     <div className="sticky top-0 z-10 flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-b border-gray-200 bg-white shrink-0">
       <h2 className="text-gray-900 font-bold text-base sm:text-lg">{isEditing ? "✏️ Edit Tenant" : "Tenant Details"}</h2>
       <div className="flex items-center gap-2">
@@ -1180,6 +1186,16 @@ function TenantDetailModal({ tenantId, onClose, onPayNow, onPaymentDone, onTenan
                           </div>
                           <div className="flex items-center justify-between sm:justify-end gap-2 shrink-0">
                             <div className="text-left sm:text-right">{pill(rec.status)}<p className="text-gray-500 text-xs mt-1">{fmt(rec.paidAmount)} / {fmt(rec.rentAmount)}</p></div>
+                            {Number(rec.paidAmount || 0) > 0 && (
+                              <button
+                                onClick={() => setEditingPayment(rec)}
+                                className="h-8 min-w-8 px-2 rounded-lg border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 font-bold text-[10px] transition-colors shrink-0"
+                                title="Edit payment record"
+                                aria-label={`Edit payment for ${fmtMonthYear(rec.dueDate)}`}
+                              >
+                                Edit
+                              </button>
+                            )}
                             {isPending && <button onClick={() => onPayNow(tenant._id, [{ type: "rent", monthYear: rec.monthYear, key: `rent:${rec.monthYear}`, maxAmount: recRemaining, label: fmtMonthYear(rec.dueDate) }], rec.monthYear)} className="text-[10px] px-2 py-1 rounded-lg bg-rose-500 hover:bg-rose-600 text-white font-bold transition-colors shrink-0">Pay {fmt(recRemaining)}</button>}
                           </div>
                         </div>
@@ -1202,11 +1218,85 @@ function TenantDetailModal({ tenantId, onClose, onPayNow, onPaymentDone, onTenan
       {showVacateConfirm && <VacateConfirmModal tenantName={tenant?.name} onConfirm={handleVacate} onCancel={() => { setShowVacateConfirm(false); setVacateError(""); }} loading={vacating} />}
       {vacateError && <div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-[80] bg-rose-600 text-white px-5 py-3 rounded-xl shadow-xl text-sm font-semibold">❌ {vacateError}</div>}
       {viewingDoc && <DocumentViewer imageUrl={viewingDoc} onClose={() => setViewingDoc(null)} />}
+      {editingPayment && <EditPaymentModal record={editingPayment} onClose={() => setEditingPayment(null)} onSave={handlePaymentCorrection} />}
     </>
   );
 }
 
 // ─── Pay Modal ────────────────────────────────────────────────────────────────
+function EditPaymentModal({ record, onClose, onSave }) {
+  const [paidAmount, setPaidAmount] = useState(record?.paidAmount ?? 0);
+  const [note, setNote] = useState("Corrected payment record");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const inputRef = useRef(null);
+  const rentAmount = Number(record?.rentAmount || 0);
+
+  useEffect(() => { inputRef.current?.focus(); }, []);
+
+  const handleSave = async () => {
+    const val = Number(paidAmount);
+    if (!Number.isFinite(val) || val < 0) return setError("Enter a valid paid amount.");
+    if (val > rentAmount) return setError(`Paid amount cannot exceed rent of ${fmt(rentAmount)}.`);
+    setLoading(true); setError("");
+    try {
+      await onSave({ monthYear: record.monthYear, paidAmount: val, note });
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+      <div className="w-full max-w-sm rounded-2xl border border-gray-200 bg-white shadow-2xl overflow-hidden">
+        <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between bg-white">
+          <h3 className="text-gray-900 font-bold">Edit Payment</h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-lg transition-colors">x</button>
+        </div>
+        <div className="p-6 space-y-4">
+          <div>
+            <p className="text-gray-500 text-xs uppercase tracking-wide mb-1">Month</p>
+            <p className="text-gray-900 text-lg font-bold">{fmtMonthYear(record?.dueDate)}</p>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="rounded-xl border border-gray-200 bg-gray-50 p-3">
+              <p className="text-gray-500 text-xs">Rent</p>
+              <p className="text-gray-900 font-bold">{fmt(rentAmount)}</p>
+            </div>
+            <div className="rounded-xl border border-gray-200 bg-gray-50 p-3">
+              <p className="text-gray-500 text-xs">Current Paid</p>
+              <p className="text-emerald-600 font-bold">{fmt(record?.paidAmount || 0)}</p>
+            </div>
+          </div>
+          <div>
+            <label className="block text-gray-600 text-xs uppercase tracking-wide mb-1.5">Correct Paid Amount (₹)</label>
+            <input
+              ref={inputRef}
+              type="number"
+              value={paidAmount}
+              onChange={(e) => setPaidAmount(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleSave()}
+              className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-gray-900 text-lg font-bold focus:outline-none focus:border-blue-400"
+              min="0"
+              max={rentAmount}
+            />
+          </div>
+          <div>
+            <label className="block text-gray-600 text-xs uppercase tracking-wide mb-1.5">Note</label>
+            <input type="text" value={note} onChange={(e) => setNote(e.target.value)} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-gray-900 text-sm focus:outline-none focus:border-blue-400" />
+          </div>
+          {error && <p className="text-rose-600 text-sm bg-rose-50 border border-rose-200 rounded-lg px-3 py-2">{error}</p>}
+          <button onClick={handleSave} disabled={loading} className="w-full py-3 rounded-xl font-bold text-white disabled:opacity-50 disabled:cursor-not-allowed active:scale-95 transition-all text-base bg-blue-600 hover:bg-blue-700">
+            {loading ? "Saving..." : "Save Correction"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function PayModal({ tenantId, payableMonths, initialMonthYear, onClose, onSuccess }) {
   const requestedKey = initialMonthYear ? `rent:${initialMonthYear}` : payableMonths[0]?.key;
   const initialKey = payableMonths.some((m) => m.key === requestedKey) ? requestedKey : payableMonths[0]?.key;
@@ -1671,6 +1761,13 @@ export default function RentManagement() {
     fetchAllDueItems();
   };
 
+  const handlePaymentCorrected = (message = "Payment record corrected.") => {
+    setToast(message);
+    setPaymentDone((n) => n + 1);
+    loadDuePage(page);
+    fetchAllDueItems();
+  };
+
   const applyLocationFilter = (items) => {
     const { building, floor, room } = locationFilter;
     if (!building && !floor && !room) return items;
@@ -1951,6 +2048,7 @@ export default function RentManagement() {
           onPayNow={onPayNow}
           onPaymentDone={paymentDone}
           onTenantUpdated={handleTenantUpdated}
+          onPaymentCorrected={handlePaymentCorrected}
         />
       )}
       {payModal && (

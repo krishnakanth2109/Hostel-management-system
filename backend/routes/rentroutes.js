@@ -92,6 +92,30 @@ function createMonthlyPayment(tenant, monthYear, dueDate) {
   };
 }
 
+function getRemainingAmount(record) {
+  return Math.max(0, Number(record.rentAmount || 0) - Number(record.paidAmount || 0));
+}
+
+function refreshPaymentStatus(record) {
+  const remaining = getRemainingAmount(record);
+  if (remaining <= 0) record.status = "Paid";
+  else if (Number(record.paidAmount || 0) > 0) record.status = "Partial";
+  else record.status = "Due";
+}
+
+function syncMonthlyPaymentRent(record, tenant) {
+  if (!record) return false;
+  const expectedRent = Number(tenant.rentAmount || 0);
+  if (!Number.isFinite(expectedRent) || expectedRent <= 0) return false;
+
+  const beforeStatus = record.status;
+  const beforeRent = Number(record.rentAmount || 0);
+  if (beforeRent !== expectedRent) record.rentAmount = expectedRent;
+  refreshPaymentStatus(record);
+
+  return beforeRent !== expectedRent || beforeStatus !== record.status;
+}
+
 function monthlyPaymentToObject(record, tenantId) {
   const obj = record?.toObject ? record.toObject() : { ...record };
   return { ...obj, tenantId };
@@ -141,9 +165,11 @@ async function buildTenantSummary(tenant, ownerId, lookaheadMs = 0) {
       record = findMonthlyPayment(rentDoc, key);
       didChange = true;
     }
-    if (record.status !== "Paid") {
+    didChange = syncMonthlyPaymentRent(record, tenant) || didChange;
+    const remaining = getRemainingAmount(record);
+    if (remaining > 0) {
       pendingMonths.push(monthlyPaymentToObject(record, tenant._id));
-      arrearsTotal += record.rentAmount - record.paidAmount;
+      arrearsTotal += remaining;
     }
   }
 
@@ -154,10 +180,11 @@ async function buildTenantSummary(tenant, ownerId, lookaheadMs = 0) {
     currentRecord = findMonthlyPayment(rentDoc, currentKey);
     didChange = true;
   }
+  didChange = syncMonthlyPaymentRent(currentRecord, tenant) || didChange;
 
   if (didChange) await rentDoc.save();
 
-  const currentRemaining = currentRecord.rentAmount - currentRecord.paidAmount;
+  const currentRemaining = getRemainingAmount(currentRecord);
   const msUntilDue = currentRecord.dueDate.getTime() - now.getTime();
   const isOverdue = msUntilDue < 0;
   const daysOverdue = isOverdue ? Math.ceil(Math.abs(msUntilDue) / 86400000) : null;
@@ -878,7 +905,10 @@ router.post("/pay", auth, async (req, res) => {
       record = findMonthlyPayment(rentDoc, key);
     }
 
-    const actualPay = Math.min(Number(amount), record.rentAmount - record.paidAmount);
+    const didSyncRent = syncMonthlyPaymentRent(record, tenant);
+    if (didSyncRent) await rentDoc.save();
+
+    const actualPay = Math.min(Number(amount), getRemainingAmount(record));
     if (actualPay <= 0) {
       return res.status(400).json({ message: "Selected month is already paid." });
     }
@@ -916,6 +946,54 @@ router.post("/pay", auth, async (req, res) => {
     }
 
     res.json({ message: `Payment of ₹${actualPay} recorded.`, record: responseRecord });
+  } catch (err) {
+    res.status(500).json({ message: "Server error.", error: err.message });
+  }
+});
+
+router.patch("/payment-correction", auth, async (req, res) => {
+  try {
+    const { tenantId, monthYear, paidAmount, note } = req.body;
+    if (!tenantId || !monthYear) {
+      return res.status(400).json({ message: "Tenant and month are required." });
+    }
+
+    const correctedPaidAmount = Number(paidAmount);
+    if (!Number.isFinite(correctedPaidAmount) || correctedPaidAmount < 0) {
+      return res.status(400).json({ message: "Enter a valid paid amount." });
+    }
+
+    const tenant = await Tenant.findOne({ _id: tenantId, owner: req.user.id });
+    if (!tenant) return res.status(404).json({ message: "Tenant not found." });
+
+    const rentDoc = await getOrCreateTenantRentDoc(tenant, req.user.id);
+    const record = findMonthlyPayment(rentDoc, monthYear);
+    if (!record) return res.status(404).json({ message: "Payment month not found." });
+
+    syncMonthlyPaymentRent(record, tenant);
+    if (correctedPaidAmount > Number(record.rentAmount || 0)) {
+      return res.status(400).json({ message: `Paid amount cannot exceed rent of ${fmtINR(record.rentAmount || 0)}.` });
+    }
+
+    const previousPaidAmount = Number(record.paidAmount || 0);
+    record.paidAmount = correctedPaidAmount;
+    refreshPaymentStatus(record);
+    record.payments = correctedPaidAmount > 0
+      ? [{ amount: correctedPaidAmount, paidAt: new Date(), note: note || "Corrected payment record" }]
+      : [];
+
+    await rentDoc.save();
+    await logActivity(
+      req.user.id,
+      "UPDATE",
+      "Rent",
+      `Corrected ${tenant.name}'s ${monthYear} payment from ₹${previousPaidAmount} to ₹${correctedPaidAmount}`
+    );
+
+    res.json({
+      message: "Payment record corrected.",
+      record: monthlyPaymentToObject(record, tenant._id),
+    });
   } catch (err) {
     res.status(500).json({ message: "Server error.", error: err.message });
   }

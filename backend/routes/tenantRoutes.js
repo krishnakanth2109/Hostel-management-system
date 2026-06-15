@@ -300,6 +300,15 @@ const auth = (req, res, next) => {
 // PUBLIC ROUTES
 // ══════════════════════════════════════════════════════════════════════════════
 
+function isFutureJoiningDate(joiningDate) {
+  if (!joiningDate) return false;
+  const selected = new Date(`${joiningDate}T00:00:00`);
+  if (Number.isNaN(selected.getTime())) return false;
+  const todayEnd = new Date();
+  todayEnd.setHours(23, 59, 59, 999);
+  return selected.getTime() > todayEnd.getTime();
+}
+
 // Generate Onboarding Link
 router.get("/generate-link", auth, (req, res) => {
   const jwtToken = jwt.sign(
@@ -380,6 +389,9 @@ router.post("/register-via-link", upload.fields([{ name: "aadharFront", maxCount
       if (!name || !phone || !permanentAddress || !joiningDate || !rentAmount) {
         return res.status(400).json({ message: "name, phone, permanentAddress, joiningDate, rentAmount are required." });
       }
+      if (isFutureJoiningDate(joiningDate)) {
+        return res.status(400).json({ message: "Joining date cannot be in the future." });
+      }
 
       const documents = await resolveDocUrls(req.files);
       const advance = advanceAmount && Number(advanceAmount) > 0 ? Number(advanceAmount) : 0;
@@ -457,6 +469,9 @@ router.post("/", auth, upload.fields([{ name: "aadharFront" }, { name: "aadharBa
       // ✅ RESTORED: Input Validation
       if (!name || !phone || !permanentAddress || !joiningDate || !rentAmount) {
         return res.status(400).json({ message: "Name, phone, permanentAddress, joiningDate, rentAmount are required." });
+      }
+      if (isFutureJoiningDate(joiningDate)) {
+        return res.status(400).json({ message: "Joining date cannot be in the future." });
       }
 
       const documents = await resolveDocUrls(req.files);

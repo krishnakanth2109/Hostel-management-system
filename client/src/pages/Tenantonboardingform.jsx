@@ -15,10 +15,16 @@ import { useState, useEffect, useRef } from "react";
 import { useParams } from "react-router-dom";
 import { API } from "../api.js";
 
+const todayDateValue = () => {
+  const date = new Date();
+  date.setMinutes(date.getMinutes() - date.getTimezoneOffset());
+  return date.toISOString().slice(0, 10);
+};
+
 const INIT = {
   name: "", phone: "", email: "", fatherName: "", fatherPhone: "",
   permanentAddress: "",
-  joiningDate: new Date().toISOString().split("T")[0],
+  joiningDate: todayDateValue(),
   rentAmount: "",
   advanceAmount: "",
 };
@@ -45,12 +51,13 @@ function Field({ label, children }) {
   );
 }
 
-function FocusInput({ type = "text", placeholder, value, onChange, required, min }) {
+function FocusInput({ type = "text", placeholder, value, onChange, required, min, ...props }) {
   const [focused, setFocused] = useState(false);
   return (
     <input
       type={type} placeholder={placeholder} value={value} onChange={onChange}
       required={required} min={min}
+      {...props}
       style={{ ...inp, ...(focused ? inpFocus : {}) }}
       onFocus={() => setFocused(true)}
       onBlur={() => setFocused(false)}
@@ -284,6 +291,8 @@ if (!form.email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) {
   // ✅ Joining Date
   if (!form.joiningDate) {
     errors.joiningDate = "Required";
+  } else if (form.joiningDate > todayDateValue()) {
+    errors.joiningDate = "Future joining dates are not allowed";
   }
 
   // ✅ Rent Amount (> 0)
@@ -718,7 +727,10 @@ const set = k => e => {
 
               <TwoCol>
                 <Field label="Joining Date *">
-                  <FocusInput type="date" value={form.joiningDate} onChange={set("joiningDate")} />
+                  <FocusInput type="date" value={form.joiningDate} onChange={set("joiningDate")} max={todayDateValue()} />
+                  {fieldErrors.joiningDate && (
+                    <span style={{ color: "red", fontSize: 11 }}>{fieldErrors.joiningDate}</span>
+                  )}
                 </Field>
                 <Field label="Monthly Rent (₹) *">
                   <FocusInput type="number" placeholder="e.g. 5000" value={form.rentAmount} onChange={set("rentAmount")} min="1" />
