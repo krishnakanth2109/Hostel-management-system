@@ -154,9 +154,9 @@ function TenantMailRow({ tenant, fallbackDate }) {
 export default function AutoMailSettings() {
   const [config, setConfig] = useState({
     isEnabled: false,
-    sendArrears: false, sendOverdue: false, sendUpcoming: false,
-    timeArrears: "09:00", timeOverdue: "10:00", timeUpcoming: "11:00",
-    lastRunArrears: null, lastRunOverdue: null, lastRunUpcoming: null,
+    sendArrears: false, sendOverdue: false, sendUpcoming: false, sendAdvancePending: false,
+    timeArrears: "09:00", timeOverdue: "10:00", timeUpcoming: "11:00", timeAdvancePending: "12:00",
+    lastRunArrears: null, lastRunOverdue: null, lastRunUpcoming: null, lastRunAdvancePending: null,
   });
 
   const [loading, setLoading] = useState(true);
@@ -164,7 +164,7 @@ export default function AutoMailSettings() {
   const [running, setRunning] = useState(false);
   const [toast,   setToast]   = useState(null); 
 
-  const [classifiedTenants, setClassifiedTenants] = useState({ arrears: [], overdue: [], upcoming: [] });
+  const [classifiedTenants, setClassifiedTenants] = useState({ arrears: [], overdue: [], upcoming: [], advance: [] });
   const [tLoading, setTLoading] = useState(false);
 
   const fetchConfig = useCallback(async () => {
@@ -178,12 +178,15 @@ export default function AutoMailSettings() {
         sendArrears:     data.sendArrears   ?? false,
         sendOverdue:     data.sendOverdue   ?? false,
         sendUpcoming:    data.sendUpcoming  ?? false,
+        sendAdvancePending: data.sendAdvancePending ?? false,
         timeArrears:     data.timeArrears   || "09:00",
         timeOverdue:     data.timeOverdue   || "10:00",
         timeUpcoming:    data.timeUpcoming  || "11:00",
+        timeAdvancePending: data.timeAdvancePending || "12:00",
         lastRunArrears:  data.lastRunArrears  || null,
         lastRunOverdue:  data.lastRunOverdue  || null,
         lastRunUpcoming: data.lastRunUpcoming || null,
+        lastRunAdvancePending: data.lastRunAdvancePending || null,
       });
     } catch (err) {
       setToast({ msg: err.message, type: "error" });
@@ -202,11 +205,16 @@ export default function AutoMailSettings() {
       const arr = [];
       const ovr = [];
       const upc = [];
+      const adv = [];
 
       data.forEach((item) => {
         if (!item || item.totalAccumulatedDue <= 0 || !item.tenant) return;
         
-        if (item.hasPreviousPending) {
+        const rentOutstanding = Number(item.arrearsTotal || 0) + Number(item.remaining || 0);
+        const advanceOnlyDue = Number(item.advancePending || 0) > 0 && rentOutstanding <= 0;
+        if (advanceOnlyDue) {
+          adv.push(item.tenant);
+        } else if (item.hasPreviousPending) {
           arr.push(item.tenant);
         } else if (item.isOverdue) {
           ovr.push(item.tenant);
@@ -215,7 +223,7 @@ export default function AutoMailSettings() {
         }
       });
 
-      setClassifiedTenants({ arrears: arr, overdue: ovr, upcoming: upc });
+      setClassifiedTenants({ arrears: arr, overdue: ovr, upcoming: upc, advance: adv });
     } catch (err) {
       console.error(err);
     } finally {
@@ -238,6 +246,7 @@ export default function AutoMailSettings() {
     if (config.sendArrears) active.push({ name: "Arrears", t: config.timeArrears });
     if (config.sendOverdue) active.push({ name: "Overdue", t: config.timeOverdue });
     if (config.sendUpcoming) active.push({ name: "Upcoming", t: config.timeUpcoming });
+    if (config.sendAdvancePending) active.push({ name: "Advance Pending", t: config.timeAdvancePending });
 
     for (let i = 0; i < active.length; i++) {
       if (!active[i].t) {
@@ -394,6 +403,20 @@ export default function AutoMailSettings() {
                   lastRun={config.lastRunUpcoming}
                   disabled={!config.isEnabled}
                 />
+
+                <ToggleBlock
+                  label="💳 Advance Payment Pending"
+                  description="Tenants whose rent dues are clear and only advance is pending"
+                  count={classifiedTenants.advance.length}
+                  badgeColor="bg-violet-100 text-violet-700"
+                  color="violet"
+                  checked={config.sendAdvancePending}
+                  onChange={(v) => updateField("sendAdvancePending", v)}
+                  time={config.timeAdvancePending}
+                  onTimeChange={(v) => updateField("timeAdvancePending", v)}
+                  lastRun={config.lastRunAdvancePending}
+                  disabled={!config.isEnabled}
+                />
               </div>
             </div>
 
@@ -429,7 +452,7 @@ export default function AutoMailSettings() {
                 </div>
               ) : (
                 <div className="space-y-2">
-                  {!config.sendArrears && !config.sendOverdue && !config.sendUpcoming && (
+                  {!config.sendArrears && !config.sendOverdue && !config.sendUpcoming && !config.sendAdvancePending && (
                     <div className="text-center py-10 bg-gray-50 rounded-2xl border border-dashed">
                       <p className="text-2xl mb-2">😴</p>
                       <p className="text-gray-500 text-sm font-semibold">No policies are active.</p>
@@ -439,6 +462,7 @@ export default function AutoMailSettings() {
                   {config.sendArrears && <RenderStatusGroup title="Arrears Targets" icon="🚨" colorClass="bg-red-500" list={classifiedTenants.arrears} fallbackDate={config.lastRunArrears} />}
                   {config.sendOverdue && <RenderStatusGroup title="Overdue Targets" icon="⚠️" colorClass="bg-orange-500" list={classifiedTenants.overdue} fallbackDate={config.lastRunOverdue} />}
                   {config.sendUpcoming && <RenderStatusGroup title="Upcoming Targets" icon="📅" colorClass="bg-blue-500" list={classifiedTenants.upcoming} fallbackDate={config.lastRunUpcoming} />}
+                  {config.sendAdvancePending && <RenderStatusGroup title="Advance Pending Targets" icon="💳" colorClass="bg-violet-500" list={classifiedTenants.advance} fallbackDate={config.lastRunAdvancePending} />}
                 </div>
               )}
             </div>

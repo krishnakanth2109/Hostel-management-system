@@ -416,15 +416,18 @@ function buildRoomAllocationSection(buildingDetails) {
 }
 
 function buildReminderEmail({ tenant, record, buildingDetails, isOverdue, daysOverdue, daysUntilDue, pendingMonths = [], arrearsTotal = 0, totalAccumulatedDue = 0, advancePending = 0 }) {
-  const remaining = record.rentAmount - record.paidAmount;
-  const month = new Date(record.dueDate).toLocaleString("en-IN", { month: "long", year: "numeric" });
+  const remaining = record ? record.rentAmount - record.paidAmount : 0;
+  const month = record?.dueDate
+    ? new Date(record.dueDate).toLocaleString("en-IN", { month: "long", year: "numeric" })
+    : "";
   const hasPreviousPending = pendingMonths.length > 0;
-  const accentColor = (isOverdue || hasPreviousPending) ? "#e53e3e" : "#d97706";
+  const advanceOnlyDue = advancePending > 0 && !hasPreviousPending && remaining <= 0;
+  const accentColor = advanceOnlyDue ? "#7c3aed" : (isOverdue || hasPreviousPending) ? "#e53e3e" : "#d97706";
 
   let statusText, badgeLabel, statusPill;
   if (advancePending > 0 && !hasPreviousPending && remaining <= 0) {
     badgeLabel  = "Advance Pending";
-    statusText  = `Your advance amount of <strong style="color:#c53030;">${fmtINR(advancePending)}</strong> is still pending. Please complete the advance payment at the earliest.`;
+    statusText  = "We kindly inform you that your advance payment is pending. Please complete the pending advance payment at your earliest convenience.";
     statusPill  = `<span class="status-pill">Advance Pending</span>`;
   } else if (hasPreviousPending) {
     badgeLabel  = `${pendingMonths.length} Month${pendingMonths.length > 1 ? "s" : ""} Arrears`;
@@ -472,15 +475,13 @@ function buildReminderEmail({ tenant, record, buildingDetails, isOverdue, daysOv
       </div>
     </div>` : "";
 
-  const bodyHtml = `
-    <p class="greeting">Hello, ${tenant.name}! 👋</p>
-    <p class="sub-text">${statusText}</p>
-    <div class="amount-box">
-      <div class="amount-label">${hasPreviousPending || advancePending > 0 ? "Total Outstanding" : "Amount Due This Month"}</div>
-      <div class="amount-value">${fmtINR(hasPreviousPending || advancePending > 0 ? totalAccumulatedDue : remaining)}</div>
-      <div>${statusPill}</div>
-      ${hasPreviousPending || advancePending > 0 ? `<div class="amount-note">Includes ${fmtINR(remaining)} current rent + ${fmtINR(arrearsTotal)} arrears${advancePending > 0 ? ` + ${fmtINR(advancePending)} pending advance` : ""}</div>` : ""}
-    </div>
+  const paymentDetailsHtml = advanceOnlyDue ? `
+    <div class="section-title">Advance Payment Details</div>
+    <div class="info-card">
+      <div class="info-row"><span class="info-label">Advance Amount</span><span class="info-value">${fmtINR(tenant.advanceAmount || 0)}</span></div>
+      <div class="info-row"><span class="info-label">Advance Paid</span><span class="info-value" style="color:#276749;">${fmtINR(tenant.paidadvanceAmount || 0)}</span></div>
+      <div class="info-row"><span class="info-label">Advance Pending</span><span class="info-value accent">${fmtINR(advancePending)}</span></div>
+    </div>` : `
     <div class="section-title">📅 Current Billing Cycle</div>
     <div class="info-card">
       <div class="info-card-header">
@@ -492,7 +493,23 @@ function buildReminderEmail({ tenant, record, buildingDetails, isOverdue, daysOv
       <div class="info-row"><span class="info-label">Monthly Rent</span><span class="info-value">${fmtINR(record.rentAmount)}</span></div>
       <div class="info-row"><span class="info-label">Paid So Far</span><span class="info-value" style="color:#276749;">${fmtINR(record.paidAmount)}</span></div>
       <div class="info-row"><span class="info-label">Remaining This Month</span><span class="info-value accent">${fmtINR(remaining)}</span></div>
+    </div>`;
+
+  const rentOutstanding = arrearsTotal + remaining;
+  const totalsBreakdown = advancePending > 0 && !advanceOnlyDue
+    ? `<div class="amount-note">Rent outstanding ${fmtINR(rentOutstanding)} + Advance pending ${fmtINR(advancePending)} = Total ${fmtINR(totalAccumulatedDue)}</div>`
+    : "";
+
+  const bodyHtml = `
+    <p class="greeting">Hello, ${tenant.name}! 👋</p>
+    <p class="sub-text">${statusText}</p>
+    <div class="amount-box">
+      <div class="amount-label">${advanceOnlyDue ? "Advance Payment Pending" : hasPreviousPending || advancePending > 0 ? "Total Outstanding" : "Amount Due This Month"}</div>
+      <div class="amount-value">${fmtINR(advanceOnlyDue ? advancePending : hasPreviousPending || advancePending > 0 ? totalAccumulatedDue : remaining)}</div>
+      <div>${statusPill}</div>
+      ${totalsBreakdown}
     </div>
+    ${paymentDetailsHtml}
     ${arrearsHtml}
     ${buildTenantDetailsSection(tenant, accentColor)}
     ${buildRoomAllocationSection(buildingDetails)}
@@ -501,7 +518,6 @@ function buildReminderEmail({ tenant, record, buildingDetails, isOverdue, daysOv
       💡 <strong>Note:</strong> If you have already made this payment, please disregard this reminder. 
     </div>`;
 
-  const advanceOnlyDue = advancePending > 0 && !hasPreviousPending && remaining <= 0;
   const subject = advanceOnlyDue
     ? `Advance Payment Pending - ${fmtINR(advancePending)}`
     : hasPreviousPending
@@ -1006,7 +1022,7 @@ router.post("/send-reminder", auth, async (req, res) => {
     if (!tenant?.email) return res.status(422).json({ message: "No email." });
 
     const summary = await buildTenantSummary(tenant, req.user.id, FIVE_DAYS_MS);
-    if (summary.currentRecord?.status === "Paid" && !summary.hasPreviousPending) {
+    if (summary.currentRecord?.status === "Paid" && !summary.hasPreviousPending && summary.advancePending <= 0) {
       return res.status(400).json({ message: "Rent already paid." });
     }
 
