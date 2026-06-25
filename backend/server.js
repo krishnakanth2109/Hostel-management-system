@@ -14,9 +14,11 @@ import rentRoutes from "./routes/rentroutes.js";
 import activityRoutes from "./routes/activityRoutes.js";
 import planRoutes from "./routes/planroutes.js";
 import approvalRoutes from "./routes/approvalroutes.js";
+import pushTokenRoutes from "./routes/pushTokenRoutes.js";
 import path from "path";
 import { fileURLToPath } from "url";
 import autoMailRouter, { initAllCronJobs } from "./routes/Automailroutes.js";
+import { initFirebase } from "./config/firebase.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname  = path.dirname(__filename);
@@ -409,6 +411,11 @@ app.use("/api/activities", activityRoutes);
 app.use("/api/plans",      planRoutes);
 app.use("/api/approval",   approvalRoutes);
 app.use("/api/auto-mail", autoMailRouter);
+app.use("/api/push-tokens", pushTokenRoutes);
+
+// ── Push notifications ──────────────────────────────────────────────────────
+// Initialise Firebase Admin at startup (no-op + warning if not configured).
+initFirebase();
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`🚀 Server on port ${PORT}`));

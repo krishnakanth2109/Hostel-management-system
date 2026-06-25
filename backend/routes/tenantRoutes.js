@@ -9,10 +9,38 @@ import axios from "axios";
 import { fileURLToPath } from "url";
 import Tenant from "../models/Tenant.js";
 import Building from "../models/Building.js";
+import User from "../models/User.js";
 import jwt from "jsonwebtoken";
 import { logActivity } from "../utils/activityLogger.js";
+import { sendPushToOwner } from "../utils/pushService.js";
 
 const router = express.Router();
+
+// ── Real-time push to the owner when a tenant submits the onboarding form ──────
+// Fire-and-forget: a push failure must never break the tenant's registration.
+async function notifyOwnerOnboarding(ownerId, tenant) {
+  try {
+    const owner = await User.findById(ownerId).select("owner name");
+    const ownerName = owner?.owner || owner?.name || "there";
+    const time = new Date().toLocaleString("en-IN", {
+      day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit",
+    });
+    const loc = tenant.allocationInfo?.buildingName
+      ? ` (${tenant.allocationInfo.buildingName} • Room ${tenant.allocationInfo.roomNumber})`
+      : "";
+    await sendPushToOwner(ownerId, {
+      title: "New Onboarding Submission 📥",
+      body: `Hi ${ownerName}, ${tenant.name} just submitted the onboarding form${loc} at ${time}. Tap to review.`,
+      data: {
+        type: "onboarding-submission",
+        tenantId: String(tenant._id),
+        ownerId: String(ownerId),
+      },
+    });
+  } catch (e) {
+    console.error("Onboarding push failed:", e.message);
+  }
+}
 
 // ── __dirname for ES modules ──────────────────────────────────────────────────
 const __filename = fileURLToPath(import.meta.url);
@@ -425,6 +453,7 @@ router.post("/register-via-link", upload.fields([{ name: "aadharFront", maxCount
         const loc = `${building.buildingName} ➔ Floor ${floor.floorNumber} ➔ Room ${room.roomNumber} ➔ Bed ${bed.bedNumber}`;
         await logActivity(ownerId, "ONBOARD", "Tenant", `New registration: ${name} at ${loc}`);
 
+        await notifyOwnerOnboarding(ownerId, tenant);
         return res.status(201).json({ message: "Registered successfully!", tenant });
       }
 
@@ -436,6 +465,7 @@ router.post("/register-via-link", upload.fields([{ name: "aadharFront", maxCount
       await tenant.save();
       await logActivity(ownerId, "ONBOARD", "Tenant", `New registration: ${name} (Waiting for room)`);
 
+      await notifyOwnerOnboarding(ownerId, tenant);
       res.status(201).json({ message: "Registered successfully!", tenant });
     } catch (err) { res.status(500).json({ message: "Server error.", error: err.message }); }
   }

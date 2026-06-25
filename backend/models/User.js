@@ -36,6 +36,17 @@ const userSchema = new mongoose.Schema(
     // Prevent re-using free trial on renewal
     usedFreePlan: { type: Boolean, default: false },
 
+    // ── Push notifications (FCM device tokens) ────────────────────────────────
+    // Every device the owner is logged in on registers its FCM token here so we
+    // can push real-time onboarding alerts to all of them (WhatsApp-style).
+    fcmTokens: [
+      {
+        token:     { type: String, required: true },
+        platform:  { type: String, default: "android" },
+        updatedAt: { type: Date,   default: Date.now },
+      },
+    ],
+
     // ── Extension / renewal request ───────────────────────────────────────────
     extensionRequest: {
       requested:   { type: Boolean, default: false },
