@@ -337,43 +337,150 @@ function isFutureJoiningDate(joiningDate) {
   return selected.getTime() > todayEnd.getTime();
 }
 
-// Generate Onboarding Link
-router.get("/generate-link", auth, (req, res) => {
-  const jwtToken = jwt.sign(
-    { id: req.user.id, purpose: "tenant-registration" },
-    process.env.JWT_SECRET,
-    { expiresIn: "7d" }
-  );
-  const shortCode = crypto.randomBytes(5).toString("base64url").slice(0, 8);
-  const expiresAt = Date.now() + 7 * 24 * 60 * 60 * 1000;
-  shortTokenStore.set(shortCode, { jwtToken, expiresAt });
-  const frontendUrl = process.env.FRONTEND_URL || "http://localhost:5173";
-  const link = `${frontendUrl}/tenant-register/${shortCode}`;
-  res.json({ link, expiresIn: "7 days" });
+// Generate (or rather, resolve) the owner's PERMANENT Onboarding Link.
+// One owner → one fixed, short, clean link that never changes and never expires.
+// A short code (8 chars) is generated ONCE and stored on the User document, so
+// the same owner always gets the same short link — and it survives restarts.
+router.get("/generate-link", auth, async (req, res) => {
+  try {
+    const owner = await User.findById(req.user.id).select("onboardingCode");
+    if (!owner) return res.status(404).json({ message: "Owner not found." });
+
+    // Reuse existing code, or create a unique one on first request.
+    if (!owner.onboardingCode) {
+      let code, exists = true, tries = 0;
+      do {
+        code = crypto.randomBytes(6).toString("base64url").slice(0, 8);
+        exists = await User.exists({ onboardingCode: code });
+      } while (exists && ++tries < 5);
+      owner.onboardingCode = code;
+      await owner.save();
+    }
+
+    const frontendUrl = process.env.FRONTEND_URL || "http://localhost:5173";
+    const link = `${frontendUrl}/tenant-register/${owner.onboardingCode}`;
+    res.json({ link, expiresIn: "never" });
+  } catch (err) {
+    res.status(500).json({ message: "Server error.", error: err.message });
+  }
+});
+
+// Resolve a short onboarding code → ownerId.
+//   1. Permanent per-owner code stored on the User document (new clean links)
+//   2. Legacy in-memory short-token store (old 7-day links still in flight)
+async function resolveOwnerFromShortToken(rawToken) {
+  const owner = await User.findOne({ onboardingCode: rawToken }).select("_id");
+  if (owner) return String(owner._id);
+
+  const entry = shortTokenStore.get(rawToken);
+  if (entry && entry.expiresAt >= Date.now()) {
+    const decoded = jwt.verify(entry.jwtToken, process.env.JWT_SECRET);
+    return decoded.id;
+  }
+  return null;
+}
+
+// ── Onboarding-link share email template ──────────────────────────────────────
+const onboardingLinkEmailHtml = (link) => `
+<!DOCTYPE html>
+<html>
+<body style="margin:0;padding:0;background:#f1f5f9;font-family:'Segoe UI',Tahoma,sans-serif;">
+  <table width="100%" cellspacing="0" cellpadding="0" style="padding:40px 15px;">
+    <tr><td align="center">
+      <table width="520" cellspacing="0" cellpadding="0"
+             style="background:#fff;border-radius:16px;overflow:hidden;
+                    box-shadow:0 8px 24px rgba(0,0,0,0.09);">
+        <tr>
+          <td style="background:linear-gradient(135deg,#1e1b4b,#4338ca,#6366f1);
+                     padding:36px 32px;text-align:center;">
+            <div style="font-size:40px;margin-bottom:10px;">🏨</div>
+            <h1 style="margin:0;font-size:22px;color:#fff;font-weight:800;">
+              Complete Your Hostel Onboarding
+            </h1>
+            <p style="margin:8px 0 0;color:#c7d2fe;font-size:13px;">
+              Nilayam Hostel — Tenant Onboarding
+            </p>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:36px 32px;">
+            <p style="margin:0 0 22px;font-size:15px;color:#374151;line-height:1.7;">
+              Please open the link below and complete your hostel onboarding form.
+            </p>
+            <div style="text-align:center;margin:28px 0;">
+              <a href="${link}"
+                 style="display:inline-block;background:linear-gradient(135deg,#4338ca,#6366f1);
+                        color:#fff;text-decoration:none;font-size:15px;font-weight:700;
+                        padding:14px 34px;border-radius:12px;">
+                Open Onboarding Form
+              </a>
+            </div>
+            <p style="margin:18px 0 0;font-size:13px;color:#6b7280;line-height:1.7;">
+              If the button does not open, copy and paste this link into Chrome:
+            </p>
+            <p style="margin:6px 0 0;font-size:13px;color:#4338ca;word-break:break-all;">
+              ${link}
+            </p>
+          </td>
+        </tr>
+        <tr>
+          <td style="background:#f8fafc;padding:16px 32px;text-align:center;
+                     font-size:12px;color:#9ca3af;">
+            &copy; ${new Date().getFullYear()} Nilayam Hostel Management
+          </td>
+        </tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+
+// ── POST /api/tenants/share-link-email ────────────────────────────────────────
+// Owner shares the permanent onboarding link to a candidate's email (automated).
+router.post("/share-link-email", auth, async (req, res) => {
+  try {
+    const { email, link } = req.body;
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return res.status(400).json({ message: "A valid email address is required." });
+    }
+    if (!link || typeof link !== "string") {
+      return res.status(400).json({ message: "Onboarding link is required." });
+    }
+
+    await sendBrevoEmail(
+      email.trim(),
+      "Future Tenant",
+      "Complete Your Hostel Onboarding — Nilayam Hostel",
+      onboardingLinkEmailHtml(link.trim())
+    );
+
+    return res.status(200).json({ message: "Onboarding link sent successfully." });
+  } catch (err) {
+    console.error("❌ Share onboarding link email error:", err.message);
+    return res.status(500).json({ message: "Failed to send email. Please try again." });
+  }
 });
 
 // Validate Link (Restored JWT Purpose Check)
 router.get("/validate-link/:token", async (req, res) => {
   try {
-    let decoded;
     const raw = req.params.token;
+    let ownerId;
 
     if (raw.length <= 12) {
-      const entry = shortTokenStore.get(raw);
-      if (!entry || entry.expiresAt < Date.now()) {
+      // Short code → look up the owner (permanent code or legacy short token).
+      ownerId = await resolveOwnerFromShortToken(raw);
+      if (!ownerId) {
         return res.status(401).json({ message: "Link is invalid or has expired." });
       }
-      decoded = jwt.verify(entry.jwtToken, process.env.JWT_SECRET);
     } else {
-      decoded = jwt.verify(raw, process.env.JWT_SECRET);
+      // Full JWT → verify directly.
+      const decoded = jwt.verify(raw, process.env.JWT_SECRET);
+      if (decoded.purpose && decoded.purpose !== "tenant-registration") {
+        return res.status(403).json({ message: "Invalid link purpose." });
+      }
+      ownerId = decoded.id;
     }
-
-    // ✅ RESTORED: JWT Purpose Check
-    if (decoded.purpose && decoded.purpose !== "tenant-registration") {
-      return res.status(403).json({ message: "Invalid link purpose." });
-    }
-
-    const ownerId  = decoded.id;
     const buildings = await Building.find({ owner: ownerId }).select("buildingName address floors").lean();
 
     const sanitised = buildings.map((b) => ({
@@ -401,17 +508,15 @@ router.post("/register-via-link", upload.fields([{ name: "aadharFront", maxCount
         joiningDate, rentAmount, advanceAmount, buildingId, floorId, roomId, bedId,
       } = req.body;
 
-      let decoded;
+      let ownerId;
       try {
         if (linkToken && linkToken.length <= 12) {
-          const entry = shortTokenStore.get(linkToken);
-          decoded = jwt.verify(entry.jwtToken, process.env.JWT_SECRET);
+          ownerId = await resolveOwnerFromShortToken(linkToken);
         } else {
-          decoded = jwt.verify(linkToken, process.env.JWT_SECRET);
+          ownerId = jwt.verify(linkToken, process.env.JWT_SECRET).id;
         }
-      } catch { return res.status(401).json({ message: "Invalid link." }); }
-
-      const ownerId = decoded.id;
+      } catch { ownerId = null; }
+      if (!ownerId) return res.status(401).json({ message: "Invalid link." });
 
       // ✅ RESTORED: Input Validation
       if (!name || !phone || !permanentAddress || !joiningDate || !rentAmount) {

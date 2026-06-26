@@ -12,6 +12,12 @@ const userSchema = new mongoose.Schema(
     role:        { type: String, enum: ["user", "master"], default: "user" },
     loginStatus: { type: String, enum: ["active", "blocked", "pending"], default: "active" },
 
+    // ── Permanent onboarding short code ───────────────────────────────────────
+    // One fixed, never-expiring short code per owner, used to build a clean
+    // short onboarding link (e.g. /tenant-register/Ab3xK9pQ). Generated once on
+    // first request and reused forever; survives server restarts.
+    onboardingCode: { type: String, default: null, index: true },
+
     // Plan reference
     plan:     { type: mongoose.Schema.Types.ObjectId, ref: "Plan", default: null },
     planName: { type: String, default: null },
