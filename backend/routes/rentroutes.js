@@ -36,6 +36,13 @@ function getDueDateForCycle(joiningDate, year, month) {
   return new Date(year, month, Math.min(joinDay, lastDay));
 }
 
+function parseMonthYear(value) {
+  if (!/^\d{4}-\d{2}$/.test(value || "")) return null;
+  const [year, monthNumber] = value.split("-").map(Number);
+  if (monthNumber < 1 || monthNumber > 12) return null;
+  return { year, month: monthNumber - 1, key: value };
+}
+
 function getAllCyclesSinceJoining(joiningDate, now = new Date(), lookaheadMs = 0) {
   const join = new Date(joiningDate);
   const joinDay = join.getDate();
@@ -772,6 +779,70 @@ async function sendBrevoEmail(toEmail, toName, subject, htmlContent) {
     throw new Error("Email send failed");
   }
 }
+
+router.get("/monthly-summary", auth, async (req, res) => {
+  try {
+    const parsed = parseMonthYear(req.query.monthYear || monthYearKey(new Date()));
+    if (!parsed) return res.status(400).json({ message: "Valid monthYear is required in YYYY-MM format." });
+
+    const monthEnd = new Date(parsed.year, parsed.month + 1, 0, 23, 59, 59, 999);
+    const tenants = await Tenant.find({
+      owner: req.user.id,
+      status: "Active",
+      joiningDate: { $lte: monthEnd },
+    }).lean();
+
+    const items = await Promise.all(
+      tenants.map(async (tenant) => {
+        const rentDoc = await RentPayment.findOne({ tenantId: tenant._id }).lean();
+        const savedRecord = (rentDoc?.monthlyPayments || []).find((payment) => payment.monthYear === parsed.key);
+        const rentAmount = Number(savedRecord?.rentAmount ?? tenant.rentAmount ?? 0);
+        const paidAmount = Number(savedRecord?.paidAmount ?? 0);
+        const remaining = Math.max(rentAmount - paidAmount, 0);
+        const status = savedRecord?.status || (paidAmount >= rentAmount && rentAmount > 0 ? "Paid" : paidAmount > 0 ? "Partial" : "Due");
+        const buildingDetails = await getBuildingDetailsForTenant(tenant);
+
+        return {
+          tenant: {
+            _id: tenant._id,
+            name: tenant.name,
+            phone: tenant.phone,
+            email: tenant.email,
+            allocationInfo: tenant.allocationInfo,
+          },
+          buildingDetails,
+          record: savedRecord
+            ? monthlyPaymentToObject(savedRecord, tenant._id)
+            : {
+                tenantId: tenant._id,
+                monthYear: parsed.key,
+                dueDate: getDueDateForCycle(tenant.joiningDate, parsed.year, parsed.month),
+                rentAmount,
+                paidAmount,
+                status,
+              },
+          remaining,
+        };
+      })
+    );
+
+    const summary = items.reduce(
+      (acc, item) => {
+        const status = item.record?.status || "Due";
+        acc.totalRevenue += Number(item.record?.rentAmount || 0);
+        acc.collectedRevenue += Number(item.record?.paidAmount || 0);
+        acc.pendingRevenue += Number(item.remaining || 0);
+        acc.counts[status] = (acc.counts[status] || 0) + 1;
+        return acc;
+      },
+      { totalRevenue: 0, collectedRevenue: 0, pendingRevenue: 0, counts: { Paid: 0, Partial: 0, Due: 0 } }
+    );
+
+    res.json({ monthYear: parsed.key, summary, tenants: items });
+  } catch (err) {
+    res.status(500).json({ message: "Server error.", error: err.message });
+  }
+});
 
 router.get("/all", auth, async (req, res) => {
   try {
