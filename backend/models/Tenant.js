@@ -43,4 +43,15 @@ const TenantSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+TenantSchema.index({ owner: 1, createdAt: -1 });
+TenantSchema.index({ owner: 1, source: 1, createdAt: -1 });
+TenantSchema.index({ owner: 1, source: 1, isVerified: 1 });
+TenantSchema.index({ owner: 1, status: 1, createdAt: -1 });
+TenantSchema.index({ owner: 1, status: 1, joiningDate: 1 });
+TenantSchema.index({ owner: 1, status: 1, buildingId: 1 });
+TenantSchema.index({ owner: 1, status: 1, name: 1 });
+TenantSchema.index({ buildingId: 1 });
+TenantSchema.index({ roomId: 1 });
+TenantSchema.index({ bedId: 1 });
+
 export default mongoose.model("Tenant", TenantSchema);

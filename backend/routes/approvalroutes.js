@@ -34,7 +34,8 @@ router.get("/pending", masterAuth, async (req, res) => {
       .select("-password")
       .populate("plan", "name price days beds")
       .populate("extensionRequest.planId", "name price days beds")
-      .sort({ createdAt: -1 });
+      .sort({ createdAt: -1 })
+      .lean();
     res.json(users);
   } catch (err) {
     res.status(500).json({ message: "Server error.", error: err.message });
@@ -47,7 +48,8 @@ router.get("/users-plan", masterAuth, async (req, res) => {
     const users = await User.find({ role: "user" })
       .select("-password")
       .populate("plan", "name price days beds isFree")
-      .sort({ createdAt: -1 });
+      .sort({ createdAt: -1 })
+      .lean();
     res.json(users);
   } catch (err) {
     res.status(500).json({ message: "Server error.", error: err.message });
@@ -90,7 +92,7 @@ router.patch("/:id/edit-plan", masterAuth, async (req, res) => {
     }
 
     await user.save();
-    const saved = await User.findById(user._id).select("-password");
+    const saved = await User.findById(user._id).select("-password").lean();
     res.json({ message: "Plan updated successfully.", user: saved });
   } catch (err) {
     res.status(500).json({ message: "Server error.", error: err.message });
@@ -146,7 +148,7 @@ router.patch("/:id/approve", masterAuth, async (req, res) => {
     }
 
     await user.save();
-    const saved = await User.findById(user._id).select("-password");
+    const saved = await User.findById(user._id).select("-password").lean();
     res.json({ message: "User approved.", user: saved });
   } catch (err) {
     res.status(500).json({ message: "Server error.", error: err.message });
@@ -173,7 +175,7 @@ router.patch("/:id/reject", masterAuth, async (req, res) => {
     }
 
     await user.save();
-    const saved = await User.findById(user._id).select("-password");
+    const saved = await User.findById(user._id).select("-password").lean();
     res.json({ message: "User rejected.", user: saved });
   } catch (err) {
     res.status(500).json({ message: "Server error.", error: err.message });

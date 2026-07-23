@@ -97,7 +97,8 @@ app.get("/api/profile", authMiddleware, async (req, res) => {
   try {
     const user = await User.findById(req.user.id)
       .select("-password")
-      .populate("plan", "name price days beds isFree");
+      .populate("plan", "name price days beds isFree")
+      .lean();
     if (!user) return res.status(404).json({ message: "User not found." });
     res.json(user);
   } catch (err) {
@@ -114,7 +115,7 @@ app.patch("/api/profile", authMiddleware, async (req, res) => {
 
     // Check email uniqueness if changing
     if (email && email.toLowerCase().trim() !== user.email) {
-      const exists = await User.findOne({ email: email.toLowerCase().trim() });
+      const exists = await User.findOne({ email: email.toLowerCase().trim() }).select("_id").lean();
       if (exists) return res.status(400).json({ message: "Email already in use." });
       user.email = email.toLowerCase().trim();
     }
@@ -135,7 +136,8 @@ app.patch("/api/profile", authMiddleware, async (req, res) => {
 
     const saved = await User.findById(user._id)
       .select("-password")
-      .populate("plan", "name price days beds isFree");
+      .populate("plan", "name price days beds isFree")
+      .lean();
 
     res.json({ message: "Profile updated successfully.", user: saved });
   } catch (err) {
@@ -151,7 +153,7 @@ app.post("/api/register", async (req, res) => {
     if (!name || !owner || !ph || !email || !password || !address)
       return res.status(400).json({ message: "All fields are required." });
 
-    const existing = await User.findOne({ email: email.toLowerCase().trim() });
+    const existing = await User.findOne({ email: email.toLowerCase().trim() }).select("_id").lean();
     if (existing)
       return res.status(400).json({ message: "Email already registered." });
 
@@ -167,7 +169,7 @@ app.post("/api/register", async (req, res) => {
     let planBeds         = null;
 
     if (planId) {
-      const plan = await Plan.findById(planId);
+      const plan = await Plan.findById(planId).lean();
       if (!plan) return res.status(400).json({ message: "Selected plan not found." });
 
       planRef  = plan._id;
@@ -378,7 +380,7 @@ app.post("/api/request-extension", async (req, res) => {
     const user = await User.findById(userId);
     if (!user) return res.status(404).json({ message: "User not found." });
 
-    const plan = await Plan.findById(planId);
+    const plan = await Plan.findById(planId).lean();
     if (!plan || !plan.isActive)
       return res.status(404).json({ message: "Plan not found or inactive." });
 

@@ -142,7 +142,7 @@ function getAdvanceSummary(tenant) {
   };
 }
 
-async function buildTenantSummary(tenant, ownerId, lookaheadMs = 0) {
+async function buildTenantSummary(tenant, ownerId, lookaheadMs = 0, existingRentDoc = null) {
   const now = new Date();
   const allCycles = getAllCyclesSinceJoining(tenant.joiningDate, now, lookaheadMs);
   const advanceSummary = getAdvanceSummary(tenant);
@@ -158,7 +158,7 @@ async function buildTenantSummary(tenant, ownerId, lookaheadMs = 0) {
 
   const currentCycle = allCycles[allCycles.length - 1];
   const previousCycles = allCycles.slice(0, -1);
-  const rentDoc = await getOrCreateTenantRentDoc(tenant, ownerId);
+  const rentDoc = existingRentDoc || await getOrCreateTenantRentDoc(tenant, ownerId);
 
   const pendingMonths = [];
   let arrearsTotal = 0;
@@ -211,6 +211,26 @@ async function buildTenantSummary(tenant, ownerId, lookaheadMs = 0) {
     dueDate: currentRecord.dueDate,
     ...advanceSummary,
   };
+}
+
+async function getRentDocsByTenantId(tenants, { lean = false } = {}) {
+  const tenantIds = tenants.map((tenant) => tenant._id);
+  if (tenantIds.length === 0) return new Map();
+
+  const query = RentPayment.find({ tenantId: { $in: tenantIds } });
+  const docs = lean ? await query.lean() : await query;
+  return new Map(docs.map((doc) => [doc.tenantId.toString(), doc]));
+}
+
+async function buildTenantSummaries(tenants, ownerId, lookaheadMs = 0) {
+  const rentDocsByTenantId = await getRentDocsByTenantId(tenants);
+  return Promise.all(
+    tenants.map(async (tenant) => {
+      const rentDoc = rentDocsByTenantId.get(tenant._id.toString());
+      const summary = await buildTenantSummary(tenant, ownerId, lookaheadMs, rentDoc);
+      return { tenant, ...summary };
+    })
+  );
 }
 
 async function getBuildingDetailsForTenant(tenant) {
@@ -675,12 +695,7 @@ router.get("/due", auth, async (req, res) => {
       });
     }
 
-    const summaries = await Promise.all(
-      tenants.map(async (tenant) => {
-        const s = await buildTenantSummary(tenant, req.user.id, FIVE_DAYS_MS);
-        return { tenant, ...s };
-      })
-    );
+    const summaries = await buildTenantSummaries(tenants, req.user.id, FIVE_DAYS_MS);
 
     const filtered = summaries.filter(isDueAlert).sort(sortDueResults);
 
@@ -736,12 +751,7 @@ router.get("/due/search", auth, async (req, res) => {
 
     if (tenants.length === 0) return res.json([]);
 
-    const summaries = await Promise.all(
-      tenants.map(async (tenant) => {
-        const s = await buildTenantSummary(tenant, req.user.id, FIVE_DAYS_MS);
-        return { tenant, ...s };
-      })
-    );
+    const summaries = await buildTenantSummaries(tenants, req.user.id, FIVE_DAYS_MS);
 
     const data = summaries
       .filter(isDueAlert)
@@ -780,6 +790,42 @@ async function sendBrevoEmail(toEmail, toName, subject, htmlContent) {
   }
 }
 
+async function getBuildingDetailsById(tenants) {
+  const buildingIds = [
+    ...new Set(
+      tenants
+        .filter((tenant) => tenant.buildingId)
+        .map((tenant) => tenant.buildingId.toString())
+    ),
+  ];
+  if (buildingIds.length === 0) return new Map();
+
+  const buildings = await Building.find(
+    { _id: { $in: buildingIds } },
+    { buildingName: 1, address: 1, floors: 1 }
+  ).lean();
+  return new Map(buildings.map((building) => [building._id.toString(), building]));
+}
+
+function getBuildingDetailsFromMap(tenant, buildingsById) {
+  if (!tenant.buildingId) return null;
+
+  const building = buildingsById.get(tenant.buildingId.toString());
+  if (!building) return null;
+
+  const floor = building.floors.find((f) => f._id.toString() === tenant.floorId?.toString());
+  const room = floor?.rooms.find((r) => r._id.toString() === tenant.roomId?.toString());
+
+  return {
+    buildingName: building.buildingName,
+    address: building.address,
+    floorNumber: floor?.floorNumber,
+    floorName: floor?.floorName,
+    roomNumber: room?.roomNumber,
+    shareType: room?.shareType,
+  };
+}
+
 router.get("/monthly-summary", auth, async (req, res) => {
   try {
     const parsed = parseMonthYear(req.query.monthYear || monthYearKey(new Date()));
@@ -792,15 +838,19 @@ router.get("/monthly-summary", auth, async (req, res) => {
       joiningDate: { $lte: monthEnd },
     }).lean();
 
-    const items = await Promise.all(
-      tenants.map(async (tenant) => {
-        const rentDoc = await RentPayment.findOne({ tenantId: tenant._id }).lean();
+    const [rentDocsByTenantId, buildingsById] = await Promise.all([
+      getRentDocsByTenantId(tenants, { lean: true }),
+      getBuildingDetailsById(tenants),
+    ]);
+
+    const items = tenants.map((tenant) => {
+        const rentDoc = rentDocsByTenantId.get(tenant._id.toString());
         const savedRecord = (rentDoc?.monthlyPayments || []).find((payment) => payment.monthYear === parsed.key);
         const rentAmount = Number(savedRecord?.rentAmount ?? tenant.rentAmount ?? 0);
         const paidAmount = Number(savedRecord?.paidAmount ?? 0);
         const remaining = Math.max(rentAmount - paidAmount, 0);
         const status = savedRecord?.status || (paidAmount >= rentAmount && rentAmount > 0 ? "Paid" : paidAmount > 0 ? "Partial" : "Due");
-        const buildingDetails = await getBuildingDetailsForTenant(tenant);
+        const buildingDetails = getBuildingDetailsFromMap(tenant, buildingsById);
 
         return {
           tenant: {
@@ -823,8 +873,7 @@ router.get("/monthly-summary", auth, async (req, res) => {
               },
           remaining,
         };
-      })
-    );
+      });
 
     const summary = items.reduce(
       (acc, item) => {
@@ -847,12 +896,8 @@ router.get("/monthly-summary", auth, async (req, res) => {
 router.get("/all", auth, async (req, res) => {
   try {
     const tenants = await Tenant.find({ owner: req.user.id, status: "Active" }).lean();
-    const results = await Promise.all(
-      tenants.map(async (tenant) => {
-        const summary = await buildTenantSummary(tenant, req.user.id, FIVE_DAYS_MS);
-        return { tenant, record: summary.currentRecord, ...summary };
-      })
-    );
+    const results = (await buildTenantSummaries(tenants, req.user.id, FIVE_DAYS_MS))
+      .map(({ tenant, ...summary }) => ({ tenant, record: summary.currentRecord, ...summary }));
     res.json(results);
   } catch (err) {
     res.status(500).json({ message: "Server error.", error: err.message });
@@ -878,12 +923,8 @@ router.get("/search", auth, async (req, res) => {
       tenants = await Tenant.find({ owner: req.user.id, status: "Active", name: { $regex: q, $options: "i" } }).lean();
     }
 
-    const results = await Promise.all(
-      tenants.map(async (tenant) => {
-        const summary = await buildTenantSummary(tenant, req.user.id, FIVE_DAYS_MS);
-        return { tenant, record: summary.currentRecord, ...summary };
-      })
-    );
+    const results = (await buildTenantSummaries(tenants, req.user.id, FIVE_DAYS_MS))
+      .map(({ tenant, ...summary }) => ({ tenant, record: summary.currentRecord, ...summary }));
     res.json(results);
   } catch (err) {
     res.status(500).json({ message: "Server error.", error: err.message });
@@ -895,10 +936,10 @@ router.get("/tenant/:tenantId", auth, async (req, res) => {
     const tenant = await Tenant.findOne({ _id: req.params.tenantId, owner: req.user.id }).lean();
     if (!tenant) return res.status(404).json({ message: "Tenant not found." });
 
-    const summary = await buildTenantSummary(tenant, req.user.id, FIVE_DAYS_MS);
+    const rentDoc = await getOrCreateTenantRentDoc(tenant, req.user.id);
+    const summary = await buildTenantSummary(tenant, req.user.id, FIVE_DAYS_MS, rentDoc);
 
     const thresholdDate = new Date(Date.now() + FIVE_DAYS_MS);
-    const rentDoc = await RentPayment.findOne({ tenantId: tenant._id }).lean();
     const history = (rentDoc?.monthlyPayments || [])
       .filter((payment) => new Date(payment.dueDate) <= thresholdDate)
       .map((payment) => ({ ...payment, tenantId: tenant._id }))

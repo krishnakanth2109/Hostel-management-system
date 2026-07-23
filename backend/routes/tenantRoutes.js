@@ -369,7 +369,7 @@ router.get("/generate-link", auth, async (req, res) => {
 //   1. Permanent per-owner code stored on the User document (new clean links)
 //   2. Legacy in-memory short-token store (old 7-day links still in flight)
 async function resolveOwnerFromShortToken(rawToken) {
-  const owner = await User.findOne({ onboardingCode: rawToken }).select("_id");
+  const owner = await User.findOne({ onboardingCode: rawToken }).select("_id").lean();
   if (owner) return String(owner._id);
 
   const entry = shortTokenStore.get(rawToken);
@@ -584,7 +584,7 @@ router.get("/notifications", auth, async (req, res) => {
   try {
     const tenants = await Tenant.find({ owner: req.user.id, source: "onboarding-link" })
       .select("name phone email joiningDate rentAmount allocationInfo isVerified createdAt documents")
-      .sort({ createdAt: -1 }).limit(30);
+      .sort({ createdAt: -1 }).limit(30).lean();
     res.json(tenants);
   } catch (err) { res.status(500).json({ message: "Server error." }); }
 });
@@ -652,14 +652,14 @@ router.get("/", auth, async (req, res) => {
   try {
     const filter = { owner: req.user.id };
     if (req.query.source) filter.source = req.query.source;
-    const tenants = await Tenant.find(filter).sort({ createdAt: -1 });
+    const tenants = await Tenant.find(filter).sort({ createdAt: -1 }).lean();
     res.json(tenants);
   } catch (err) { res.status(500).json({ message: "Server error." }); }
 });
 
 router.get("/:id", auth, async (req, res) => {
   try {
-    const tenant = await Tenant.findOne({ _id: req.params.id, owner: req.user.id });
+    const tenant = await Tenant.findOne({ _id: req.params.id, owner: req.user.id }).lean();
     res.json(tenant);
   } catch (err) { res.status(500).json({ message: "Server error." }); }
 });

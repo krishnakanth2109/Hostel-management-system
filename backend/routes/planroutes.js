@@ -22,7 +22,7 @@ function masterAuth(req, res, next) {
 // ── GET all active plans (public — landing page) ──────────────────────────────
 router.get("/", async (req, res) => {
   try {
-    const plans = await Plan.find({ isActive: true }).sort({ price: 1 });
+    const plans = await Plan.find({ isActive: true }).sort({ price: 1 }).lean();
     res.json(plans);
   } catch (err) {
     res.status(500).json({ message: "Server error.", error: err.message });
@@ -32,7 +32,7 @@ router.get("/", async (req, res) => {
 // ── GET all plans including inactive (master) ─────────────────────────────────
 router.get("/all", masterAuth, async (req, res) => {
   try {
-    const plans = await Plan.find().sort({ price: 1 });
+    const plans = await Plan.find().sort({ price: 1 }).lean();
     res.json(plans);
   } catch (err) {
     res.status(500).json({ message: "Server error.", error: err.message });
