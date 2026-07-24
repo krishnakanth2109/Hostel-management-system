@@ -11,6 +11,7 @@ import Tenant from "../models/Tenant.js";
 import RentPayment from "../models/Rentpayment.js";
 import AutoMailConfig from "../models/Automailconfig.js";
 import Building from "../models/Building.js";
+import User from "../models/User.js";
 
 const router = express.Router();
 
@@ -19,6 +20,19 @@ const auth = (req, res, next) => {
   if (!token) return res.status(401).json({ message: "No token provided." });
   try {
     req.user = jwt.verify(token, process.env.JWT_SECRET);
+    next();
+  } catch {
+    res.status(401).json({ message: "Invalid token." });
+  }
+};
+
+const masterAuth = (req, res, next) => {
+  const token = req.headers.authorization?.split(" ")[1];
+  if (!token) return res.status(401).json({ message: "No token provided." });
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    if (decoded.role !== "master") return res.status(403).json({ message: "Access denied. Master only." });
+    req.user = decoded;
     next();
   } catch {
     res.status(401).json({ message: "Invalid token." });
@@ -66,6 +80,63 @@ function getMins(timeStr) {
   if (!timeStr) return 0;
   const [h, m] = timeStr.split(":").map(Number);
   return h * 60 + m;
+}
+
+function defaultAutoMailConfig(ownerId) {
+  return {
+    owner: ownerId,
+    isEnabled: false,
+    sendArrears: false,
+    sendOverdue: false,
+    sendUpcoming: false,
+    sendAdvancePending: false,
+    timeArrears: "09:00",
+    timeOverdue: "10:00",
+    timeUpcoming: "11:00",
+    timeAdvancePending: "12:00",
+    lastRunArrears: null,
+    lastRunOverdue: null,
+    lastRunUpcoming: null,
+    lastRunAdvancePending: null,
+  };
+}
+
+function validateAutoMailConfigPayload(payload) {
+  const { sendArrears, sendOverdue, sendUpcoming, sendAdvancePending, timeArrears, timeOverdue, timeUpcoming, timeAdvancePending, isEnabled } = payload;
+
+  if (!isEnabled) return null;
+
+  const activeTimes = [];
+  if (sendArrears) {
+    if (!timeArrears) return "Time allocation is mandatory for Arrears.";
+    activeTimes.push({ label: "Arrears", time: timeArrears });
+  }
+  if (sendOverdue) {
+    if (!timeOverdue) return "Time allocation is mandatory for Overdue.";
+    activeTimes.push({ label: "Overdue", time: timeOverdue });
+  }
+  if (sendUpcoming) {
+    if (!timeUpcoming) return "Time allocation is mandatory for Upcoming.";
+    activeTimes.push({ label: "Upcoming", time: timeUpcoming });
+  }
+  if (sendAdvancePending) {
+    if (!timeAdvancePending) return "Time allocation is mandatory for Advance Pending.";
+    activeTimes.push({ label: "Advance Pending", time: timeAdvancePending });
+  }
+
+  for (let i = 0; i < activeTimes.length; i++) {
+    for (let j = i + 1; j < activeTimes.length; j++) {
+      const m1 = getMins(activeTimes[i].time);
+      const m2 = getMins(activeTimes[j].time);
+      let diff = Math.abs(m1 - m2);
+      if (diff > 12 * 60) diff = 24 * 60 - diff;
+      if (diff < 30) {
+        return `Security Warning: Keep at least a 30-minute gap between ${activeTimes[i].label} and ${activeTimes[j].label} to prevent spam-blocking.`;
+      }
+    }
+  }
+
+  return null;
 }
 
 function getAllCyclesSinceJoining(joiningDate, now = new Date(), lookaheadMs = 0) {
@@ -603,6 +674,25 @@ function scheduleJobForOwner(ownerId, type, timeStr) {
   console.log(`[AutoMail] Scheduled ${jobKey} at ${timeStr} (IST)`);
 }
 
+function stopJobsForOwner(ownerId) {
+  ["arrears", "overdue", "upcoming", "advance"].forEach((type) => {
+    const jobKey = `${ownerId}_${type}`;
+    if (cronJobs.has(jobKey)) {
+      cronJobs.get(jobKey).stop();
+      cronJobs.delete(jobKey);
+    }
+  });
+}
+
+function scheduleConfigForOwner(ownerId, config) {
+  stopJobsForOwner(ownerId);
+  if (!config?.isEnabled) return;
+  if (config.sendArrears && config.timeArrears) scheduleJobForOwner(ownerId, "arrears", config.timeArrears);
+  if (config.sendOverdue && config.timeOverdue) scheduleJobForOwner(ownerId, "overdue", config.timeOverdue);
+  if (config.sendUpcoming && config.timeUpcoming) scheduleJobForOwner(ownerId, "upcoming", config.timeUpcoming);
+  if (config.sendAdvancePending && config.timeAdvancePending) scheduleJobForOwner(ownerId, "advance", config.timeAdvancePending);
+}
+
 export async function initAllCronJobs() {
   try {
     const allConfigs = await AutoMailConfig.find({ isEnabled: true });
@@ -619,6 +709,70 @@ export async function initAllCronJobs() {
 }
 
 // ── Routes ──
+router.get("/master/configs", masterAuth, async (req, res) => {
+  try {
+    const owners = await User.find({ role: "user" })
+      .select("name owner email ph loginStatus")
+      .sort({ createdAt: -1 })
+      .lean();
+    const ownerIds = owners.map((owner) => owner._id);
+    const configs = await AutoMailConfig.find({ owner: { $in: ownerIds } }).lean();
+    const configByOwner = new Map(configs.map((config) => [config.owner.toString(), config]));
+
+    res.json(owners.map((owner) => ({
+      owner,
+      config: configByOwner.get(owner._id.toString()) || defaultAutoMailConfig(owner._id),
+    })));
+  } catch (err) {
+    res.status(500).json({ message: "Server error.", error: err.message });
+  }
+});
+
+router.put("/master/configs/:ownerId", masterAuth, async (req, res) => {
+  try {
+    const owner = await User.findOne({ _id: req.params.ownerId, role: "user" }).select("name owner email ph").lean();
+    if (!owner) return res.status(404).json({ message: "Owner not found." });
+
+    const validationError = validateAutoMailConfigPayload(req.body);
+    if (validationError) return res.status(400).json({ message: validationError });
+
+    const {
+      sendArrears = false,
+      sendOverdue = false,
+      sendUpcoming = false,
+      sendAdvancePending = false,
+      timeArrears = "09:00",
+      timeOverdue = "10:00",
+      timeUpcoming = "11:00",
+      timeAdvancePending = "12:00",
+      isEnabled = false,
+    } = req.body;
+
+    const config = await AutoMailConfig.findOneAndUpdate(
+      { owner: owner._id },
+      {
+        $set: {
+          sendArrears,
+          sendOverdue,
+          sendUpcoming,
+          sendAdvancePending,
+          timeArrears,
+          timeOverdue,
+          timeUpcoming,
+          timeAdvancePending,
+          isEnabled,
+        },
+      },
+      { returnDocument: "after", upsert: true, runValidators: true }
+    );
+
+    scheduleConfigForOwner(owner._id.toString(), config);
+    res.json({ message: `Auto email settings saved for ${owner.owner || owner.name}.`, owner, config });
+  } catch (err) {
+    res.status(500).json({ message: "Server error.", error: err.message });
+  }
+});
+
 router.get("/config", auth, async (req, res) => {
   try {
     let config = await AutoMailConfig.findOne({ owner: req.user.id });

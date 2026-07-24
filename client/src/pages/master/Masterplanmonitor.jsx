@@ -393,9 +393,11 @@ export default function MasterPlanMonitor() {
         /* Table Styles */
         .data-table {
           width: 100%;
-          border-collapse: collapse;
+          min-width: 1320px;
+          border-collapse: separate;
+          border-spacing: 0;
           background: #ffffff;
-          border-radius: 20px;
+          border-radius: 18px;
           overflow: hidden;
           box-shadow: 0 1px 3px rgba(0,0,0,0.04);
         }
@@ -406,7 +408,7 @@ export default function MasterPlanMonitor() {
         }
 
         .data-table th {
-          padding: 16px 16px;
+          padding: 15px 18px;
           text-align: left;
           font-size: 11px;
           font-weight: 700;
@@ -418,11 +420,22 @@ export default function MasterPlanMonitor() {
         }
 
         .data-table td {
-          padding: 16px 16px;
+          padding: 18px;
           border-bottom: 1px solid #f1f5f9;
-          vertical-align: middle;
+          vertical-align: top;
           transition: all 0.2s;
         }
+
+        .data-table th:nth-child(1), .data-table td:nth-child(1) { width: 70px; }
+        .data-table th:nth-child(2), .data-table td:nth-child(2) { width: 250px; }
+        .data-table th:nth-child(3), .data-table td:nth-child(3) { width: 210px; }
+        .data-table th:nth-child(4), .data-table td:nth-child(4) { width: 140px; }
+        .data-table th:nth-child(5), .data-table td:nth-child(5) { width: 140px; }
+        .data-table th:nth-child(6), .data-table td:nth-child(6),
+        .data-table th:nth-child(7), .data-table td:nth-child(7),
+        .data-table th:nth-child(8), .data-table td:nth-child(8) { width: 170px; }
+        .data-table th:nth-child(9), .data-table td:nth-child(9) { width: 190px; }
+        .data-table th:nth-child(10), .data-table td:nth-child(10) { width: 120px; }
 
         .data-table tbody tr:hover td {
           background: #fafcff;
@@ -437,10 +450,11 @@ export default function MasterPlanMonitor() {
           display: inline-flex;
           align-items: center;
           gap: 6px;
-          padding: 5px 12px;
+          padding: 7px 12px;
           border-radius: 30px;
           font-size: 12px;
-          font-weight: 600;
+          font-weight: 700;
+          white-space: nowrap;
         }
 
         /* Search Input */
@@ -471,13 +485,14 @@ export default function MasterPlanMonitor() {
         .user-name {
           font-weight: 700;
           color: #0f172a;
-          font-size: 14px;
+          font-size: 14.5px;
+          line-height: 1.35;
         }
 
         .user-owner {
           color: #64748b;
-          font-size: 11px;
-          margin-top: 2px;
+          font-size: 12px;
+          margin-top: 6px;
           display: flex;
           align-items: center;
           gap: 4px;
@@ -485,27 +500,87 @@ export default function MasterPlanMonitor() {
 
         .user-email {
           color: #3b82f6;
-          font-size: 11px;
-          margin-top: 2px;
+          font-size: 12px;
+          margin-top: 3px;
+          line-height: 1.35;
+          word-break: break-word;
+        }
+
+        .user-card {
+          display: flex;
+          align-items: flex-start;
+          gap: 12px;
+        }
+
+        .user-avatar {
+          width: 38px;
+          height: 38px;
+          border-radius: 12px;
+          background: #eef2ff;
+          color: #4f46e5;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 14px;
+          font-weight: 800;
+          flex-shrink: 0;
+          text-transform: uppercase;
         }
 
         .plan-name {
           font-weight: 700;
           color: #0f172a;
-          font-size: 14px;
+          font-size: 14.5px;
+          line-height: 1.3;
         }
 
         .plan-details {
           color: #64748b;
+          font-size: 11.5px;
+          margin-top: 7px;
+          line-height: 1.6;
+          max-width: 180px;
+        }
+
+        .plan-card {
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+        }
+
+        .plan-meta {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 6px;
+        }
+
+        .plan-pill {
+          display: inline-flex;
+          align-items: center;
+          min-height: 24px;
+          padding: 4px 8px;
+          border-radius: 8px;
+          background: #f8fafc;
+          border: 1px solid #e2e8f0;
+          color: #475569;
           font-size: 11px;
-          margin-top: 2px;
+          font-weight: 700;
+          white-space: nowrap;
+        }
+
+        .plan-pill.limit {
+          background: #f5f3ff;
+          border-color: #ddd6fe;
+          color: #6d28d9;
         }
 
         .date-text {
           color: #475569;
-          font-size: 12px;
-          font-family: monospace;
-          white-space: nowrap;
+          font-size: 12.5px;
+          font-family: 'JetBrains Mono', 'Fira Code', monospace;
+          white-space: normal;
+          line-height: 1.45;
+          max-width: 150px;
         }
 
         .expired-date {
@@ -568,9 +643,17 @@ export default function MasterPlanMonitor() {
         /* Overflow container */
         .table-container {
           overflow-x: auto;
-          border-radius: 20px;
+          border-radius: 18px;
           background: #ffffff;
           border: 1px solid #e2e8f0;
+          box-shadow: 0 10px 30px rgba(15, 23, 42, 0.06);
+        }
+
+        .table-container::before {
+          content: "";
+          display: block;
+          height: 4px;
+          background: linear-gradient(90deg, #6366f1, #10b981, #f59e0b);
         }
 
         /* ── Edit Button ───────────────────────────────────────────────────── */
@@ -916,7 +999,10 @@ export default function MasterPlanMonitor() {
             </thead>
             <tbody>
               {filtered.map((user, idx) => {
-                const ps = STATUS_STYLES[user.planStatus] || STATUS_STYLES.none;
+                const displayPlanStatus = user.planExpiresAt && new Date(user.planExpiresAt) < new Date()
+                  ? "expired"
+                  : user.planStatus;
+                const ps = STATUS_STYLES[displayPlanStatus] || STATUS_STYLES.none;
                 const ls = LOGIN_STYLES[user.loginStatus] || LOGIN_STYLES.active;
                 const isExpired = user.planExpiresAt && new Date(user.planExpiresAt) < new Date();
                 
