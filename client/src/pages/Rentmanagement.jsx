@@ -910,6 +910,12 @@ function TenantDetailModal({ tenantId, onClose, onPayNow, onPaymentDone, onTenan
   const passportPhoto = tenant?.documents?.passportPhoto;
   const advanceAmount = Number(tenant?.advanceAmount || 0);
   const paidAdvanceAmount = Number(tenant?.paidadvanceAmount || 0);
+  const advanceEditRecord = {
+    type: "advance",
+    monthYear: "advance",
+    rentAmount: advanceAmount > 0 ? advanceAmount : paidAdvanceAmount + advancePending,
+    paidAmount: paidAdvanceAmount,
+  };
   const advanceOnly = advancePending > 0 && !hasPreviousPending && Number(remaining || 0) <= 0;
   const handleViewDocument = (docUrl) => { if (docUrl) setViewingDoc(docUrl); };
   const inputClass = "w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-gray-900 text-sm focus:outline-none focus:border-amber-400 transition-colors";
@@ -1135,7 +1141,19 @@ function TenantDetailModal({ tenantId, onClose, onPayNow, onPaymentDone, onTenan
                 ].filter(Boolean).map(([label, val]) => (
                   <div key={label} className="rounded-xl bg-gray-50 border border-gray-200 p-3">
                     <p className="text-gray-500 text-[11px] uppercase tracking-wide mb-0.5">{label}</p>
-                    <p className="text-gray-900 text-sm font-medium break-words">{val || "—"}</p>
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-gray-900 text-sm font-medium break-words">{val || "—"}</p>
+                      {label === "Advance Paid" && paidAdvanceAmount > 0 && (
+                        <button
+                          onClick={() => setEditingPayment(advanceEditRecord)}
+                          className="h-7 px-2 rounded-lg border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 font-bold text-[10px] transition-colors shrink-0"
+                          title="Edit advance payment"
+                          aria-label="Edit advance payment"
+                        >
+                          Edit
+                        </button>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>
@@ -1237,13 +1255,14 @@ function EditPaymentModal({ record, onClose, onSave }) {
   const [error, setError] = useState("");
   const inputRef = useRef(null);
   const rentAmount = Number(record?.rentAmount || 0);
+  const isAdvanceEdit = record?.type === "advance" || record?.monthYear === "advance";
 
   useEffect(() => { inputRef.current?.focus(); }, []);
 
   const handleSave = async () => {
     const val = Number(paidAmount);
     if (!Number.isFinite(val) || val < 0) return setError("Enter a valid paid amount.");
-    if (val > rentAmount) return setError(`Paid amount cannot exceed rent of ${fmt(rentAmount)}.`);
+    if (val > rentAmount) return setError(`Paid amount cannot exceed ${isAdvanceEdit ? "advance" : "rent"} of ${fmt(rentAmount)}.`);
     setLoading(true); setError("");
     try {
       await onSave({ monthYear: record.monthYear, paidAmount: val, note });
@@ -1258,17 +1277,17 @@ function EditPaymentModal({ record, onClose, onSave }) {
     <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
       <div className="w-full max-w-sm rounded-2xl border border-gray-200 bg-white shadow-2xl overflow-hidden">
         <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between bg-white">
-          <h3 className="text-gray-900 font-bold">Edit Payment</h3>
+          <h3 className="text-gray-900 font-bold">{isAdvanceEdit ? "Edit Advance" : "Edit Payment"}</h3>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-lg transition-colors">x</button>
         </div>
         <div className="p-6 space-y-4">
           <div>
-            <p className="text-gray-500 text-xs uppercase tracking-wide mb-1">Month</p>
-            <p className="text-gray-900 text-lg font-bold">{fmtMonthYear(record?.dueDate)}</p>
+            <p className="text-gray-500 text-xs uppercase tracking-wide mb-1">{isAdvanceEdit ? "Type" : "Month"}</p>
+            <p className="text-gray-900 text-lg font-bold">{isAdvanceEdit ? "Advance Payment" : fmtMonthYear(record?.dueDate)}</p>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="rounded-xl border border-gray-200 bg-gray-50 p-3">
-              <p className="text-gray-500 text-xs">Rent</p>
+              <p className="text-gray-500 text-xs">{isAdvanceEdit ? "Advance" : "Rent"}</p>
               <p className="text-gray-900 font-bold">{fmt(rentAmount)}</p>
             </div>
             <div className="rounded-xl border border-gray-200 bg-gray-50 p-3">

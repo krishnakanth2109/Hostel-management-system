@@ -31,7 +31,9 @@ function monthYearKey(date = new Date()) {
 }
 
 function getDueDateForCycle(joiningDate, year, month) {
-  const joinDay = new Date(joiningDate).getDate();
+  const joinDate = new Date(joiningDate);
+  if (Number.isNaN(joinDate.getTime())) return new Date(year, month, 1);
+  const joinDay = joinDate.getDate();
   const lastDay = new Date(year, month + 1, 0).getDate();
   return new Date(year, month, Math.min(joinDay, lastDay));
 }
@@ -45,6 +47,7 @@ function parseMonthYear(value) {
 
 function getAllCyclesSinceJoining(joiningDate, now = new Date(), lookaheadMs = 0) {
   const join = new Date(joiningDate);
+  if (Number.isNaN(join.getTime())) return [];
   const joinDay = join.getDate();
   const cycles = [];
   const thresholdTime = now.getTime() + lookaheadMs;
@@ -92,7 +95,7 @@ function createMonthlyPayment(tenant, monthYear, dueDate) {
   return {
     monthYear,
     dueDate,
-    rentAmount: tenant.rentAmount,
+    rentAmount: Number(tenant.rentAmount || 0),
     paidAmount: 0,
     status: "Due",
     payments: [],
@@ -101,6 +104,57 @@ function createMonthlyPayment(tenant, monthYear, dueDate) {
 
 function getRemainingAmount(record) {
   return Math.max(0, Number(record.rentAmount || 0) - Number(record.paidAmount || 0));
+}
+
+function normalizeMonthlyPayment(record, tenant, monthYear, dueDate) {
+  if (!record) return false;
+
+  let didChange = false;
+  const expectedRent = Number(tenant.rentAmount || 0);
+  const paidAmount = Number(record.paidAmount || 0);
+
+  if (!record.monthYear) {
+    record.monthYear = monthYear;
+    didChange = true;
+  }
+  if (!record.dueDate || Number.isNaN(new Date(record.dueDate).getTime())) {
+    record.dueDate = dueDate;
+    didChange = true;
+  }
+  if (!Number.isFinite(Number(record.rentAmount)) || Number(record.rentAmount) < 0) {
+    record.rentAmount = expectedRent;
+    didChange = true;
+  }
+  if (!Number.isFinite(paidAmount) || paidAmount < 0) {
+    record.paidAmount = 0;
+    didChange = true;
+  }
+  if (!["Due", "Partial", "Paid"].includes(record.status)) {
+    record.status = Number(record.paidAmount || 0) >= Number(record.rentAmount || 0)
+      ? "Paid"
+      : Number(record.paidAmount || 0) > 0
+        ? "Partial"
+        : "Due";
+    didChange = true;
+  }
+  if (!Array.isArray(record.payments)) {
+    record.payments = [];
+    didChange = true;
+  } else {
+    const cleanedPayments = record.payments
+      .filter((payment) => Number.isFinite(Number(payment.amount)) && Number(payment.amount) > 0)
+      .map((payment) => ({
+        amount: Number(payment.amount),
+        paidAt: payment.paidAt && !Number.isNaN(new Date(payment.paidAt).getTime()) ? payment.paidAt : new Date(),
+        note: payment.note || "",
+      }));
+    if (cleanedPayments.length !== record.payments.length) {
+      record.payments = cleanedPayments;
+      didChange = true;
+    }
+  }
+
+  return didChange;
 }
 
 function refreshPaymentStatus(record) {
@@ -129,7 +183,7 @@ function monthlyPaymentToObject(record, tenantId) {
 }
 
 function sortMonthlyPaymentsDesc(a, b) {
-  return b.monthYear.localeCompare(a.monthYear);
+  return String(b.monthYear || "").localeCompare(String(a.monthYear || ""));
 }
 
 function getAdvanceSummary(tenant) {
@@ -164,6 +218,18 @@ async function buildTenantSummary(tenant, ownerId, lookaheadMs = 0, existingRent
   let arrearsTotal = 0;
   let didChange = false;
 
+  for (const record of rentDoc.monthlyPayments || []) {
+    const parsed = parseMonthYear(record.monthYear);
+    const savedDueDate = new Date(record.dueDate);
+    const fallbackDueDate = parsed
+      ? getDueDateForCycle(tenant.joiningDate, parsed.year, parsed.month)
+      : Number.isNaN(savedDueDate.getTime())
+        ? currentCycle.dueDate
+        : savedDueDate;
+    const fallbackKey = parsed?.key || monthYearKey(fallbackDueDate);
+    didChange = normalizeMonthlyPayment(record, tenant, fallbackKey, fallbackDueDate) || didChange;
+  }
+
   for (const { year, month, dueDate } of previousCycles) {
     const key = `${year}-${String(month + 1).padStart(2, "0")}`;
     let record = findMonthlyPayment(rentDoc, key);
@@ -172,6 +238,7 @@ async function buildTenantSummary(tenant, ownerId, lookaheadMs = 0, existingRent
       record = findMonthlyPayment(rentDoc, key);
       didChange = true;
     }
+    didChange = normalizeMonthlyPayment(record, tenant, key, dueDate) || didChange;
     didChange = syncMonthlyPaymentRent(record, tenant) || didChange;
     const remaining = getRemainingAmount(record);
     if (remaining > 0) {
@@ -187,12 +254,20 @@ async function buildTenantSummary(tenant, ownerId, lookaheadMs = 0, existingRent
     currentRecord = findMonthlyPayment(rentDoc, currentKey);
     didChange = true;
   }
+  didChange = normalizeMonthlyPayment(currentRecord, tenant, currentKey, currentCycle.dueDate) || didChange;
   didChange = syncMonthlyPaymentRent(currentRecord, tenant) || didChange;
 
-  if (didChange) await rentDoc.save();
+  if (didChange) {
+    try {
+      await rentDoc.save();
+    } catch (err) {
+      console.error("Rent summary cleanup save failed:", err.message);
+    }
+  }
 
   const currentRemaining = getRemainingAmount(currentRecord);
-  const msUntilDue = currentRecord.dueDate.getTime() - now.getTime();
+  const currentDueDate = new Date(currentRecord.dueDate);
+  const msUntilDue = currentDueDate.getTime() - now.getTime();
   const isOverdue = msUntilDue < 0;
   const daysOverdue = isOverdue ? Math.ceil(Math.abs(msUntilDue) / 86400000) : null;
   const daysUntilDue = !isOverdue ? Math.ceil(msUntilDue / 86400000) : null;
@@ -239,8 +314,8 @@ async function getBuildingDetailsForTenant(tenant) {
   const building = await Building.findById(tenant.buildingId).lean();
   if (!building) return null;
 
-  const floor = building.floors.find((f) => f._id.toString() === tenant.floorId?.toString());
-  const room = floor?.rooms.find((r) => r._id.toString() === tenant.roomId?.toString());
+  const floor = (building.floors || []).find((f) => f._id.toString() === tenant.floorId?.toString());
+  const room = (floor?.rooms || []).find((r) => r._id.toString() === tenant.roomId?.toString());
 
   return {
     buildingName: building.buildingName,
@@ -813,8 +888,8 @@ function getBuildingDetailsFromMap(tenant, buildingsById) {
   const building = buildingsById.get(tenant.buildingId.toString());
   if (!building) return null;
 
-  const floor = building.floors.find((f) => f._id.toString() === tenant.floorId?.toString());
-  const room = floor?.rooms.find((r) => r._id.toString() === tenant.roomId?.toString());
+  const floor = (building.floors || []).find((f) => f._id.toString() === tenant.floorId?.toString());
+  const room = (floor?.rooms || []).find((r) => r._id.toString() === tenant.roomId?.toString());
 
   return {
     buildingName: building.buildingName,
@@ -941,16 +1016,19 @@ router.get("/tenant/:tenantId", auth, async (req, res) => {
 
     const thresholdDate = new Date(Date.now() + FIVE_DAYS_MS);
     const history = (rentDoc?.monthlyPayments || [])
-      .filter((payment) => new Date(payment.dueDate) <= thresholdDate)
-      .map((payment) => ({ ...payment, tenantId: tenant._id }))
+      .filter((payment) => {
+        const dueDate = new Date(payment.dueDate);
+        return !Number.isNaN(dueDate.getTime()) && dueDate <= thresholdDate;
+      })
+      .map((payment) => monthlyPaymentToObject(payment, tenant._id))
       .sort(sortMonthlyPaymentsDesc);
 
     let buildingDetails = null;
     if (tenant.buildingId) {
       const building = await Building.findById(tenant.buildingId).lean();
       if (building) {
-        const floor = building.floors.find((f) => f._id.toString() === tenant.floorId?.toString());
-        const room = floor?.rooms.find((r) => r._id.toString() === tenant.roomId?.toString());
+        const floor = (building.floors || []).find((f) => f._id.toString() === tenant.floorId?.toString());
+        const room = (floor?.rooms || []).find((r) => r._id.toString() === tenant.roomId?.toString());
         buildingDetails = {
           buildingName: building.buildingName, address: building.address,
           floorNumber: floor?.floorNumber, floorName: floor?.floorName,
@@ -1093,6 +1171,32 @@ router.patch("/payment-correction", auth, async (req, res) => {
 
     const tenant = await Tenant.findOne({ _id: tenantId, owner: req.user.id });
     if (!tenant) return res.status(404).json({ message: "Tenant not found." });
+
+    if (monthYear === "advance") {
+      const advanceAmount = Number(tenant.advanceAmount || 0);
+      if (correctedPaidAmount > advanceAmount) {
+        return res.status(400).json({ message: `Paid amount cannot exceed advance of ${fmtINR(advanceAmount)}.` });
+      }
+
+      const previousPaidAmount = Number(tenant.paidadvanceAmount || 0);
+      tenant.paidadvanceAmount = correctedPaidAmount;
+      await tenant.save();
+
+      await logActivity(
+        req.user.id,
+        "UPDATE",
+        "Rent",
+        `Corrected ${tenant.name}'s advance payment from ₹${previousPaidAmount} to ₹${correctedPaidAmount}`
+      );
+
+      return res.json({
+        message: "Advance payment corrected.",
+        paymentType: "advance",
+        advanceAmount,
+        paidadvanceAmount: Number(tenant.paidadvanceAmount || 0),
+        advancePending: Math.max(0, advanceAmount - Number(tenant.paidadvanceAmount || 0)),
+      });
+    }
 
     const rentDoc = await getOrCreateTenantRentDoc(tenant, req.user.id);
     const record = findMonthlyPayment(rentDoc, monthYear);
