@@ -22,8 +22,13 @@ async function notifyOwnerOnboarding(ownerId, tenant) {
   try {
     const owner = await User.findById(ownerId).select("owner name");
     const ownerName = owner?.owner || owner?.name || "there";
-    const time = new Date().toLocaleString("en-IN", {
-      day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit",
+    const submittedAt = tenant.createdAt || new Date();
+    const time = new Date(submittedAt).toLocaleString("en-IN", {
+      timeZone: "Asia/Kolkata",
+      day: "2-digit",
+      month: "short",
+      hour: "2-digit",
+      minute: "2-digit",
     });
     const loc = tenant.allocationInfo?.buildingName
       ? ` (${tenant.allocationInfo.buildingName} • Room ${tenant.allocationInfo.roomNumber})`
@@ -35,6 +40,7 @@ async function notifyOwnerOnboarding(ownerId, tenant) {
         type: "onboarding-submission",
         tenantId: String(tenant._id),
         ownerId: String(ownerId),
+        submittedAt: new Date(submittedAt).toISOString(),
       },
     });
   } catch (e) {
