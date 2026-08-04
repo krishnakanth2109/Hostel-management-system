@@ -47,9 +47,8 @@ const TenantSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-TenantSchema.pre("validate", function (next) {
+TenantSchema.pre("validate", function () {
   if (!this.secureId) this.secureId = createSecureId();
-  next();
 });
 
 TenantSchema.index({ owner: 1, createdAt: -1 });

@@ -1,4 +1,3 @@
-import "dotenv/config";
 import express from "express";
 import multer from "multer";
 import { v2 as cloudinary } from "cloudinary";
@@ -6,6 +5,7 @@ import crypto from "crypto";
 import path from "path";
 import fs from "fs";
 import axios from "axios";
+import dotenv from "dotenv";
 import { fileURLToPath } from "url";
 import Tenant from "../models/Tenant.js";
 import Building from "../models/Building.js";
@@ -45,6 +45,8 @@ async function notifyOwnerOnboarding(ownerId, tenant) {
 // ── __dirname for ES modules ──────────────────────────────────────────────────
 const __filename = fileURLToPath(import.meta.url);
 const __dirname  = path.dirname(__filename);
+
+dotenv.config({ path: path.join(__dirname, "..", ".env") });
 
 // ── In-memory short-token store ───────────────────────────────────────────────
 const shortTokenStore = new Map();
@@ -533,11 +535,14 @@ router.post("/register-via-link", upload.fields([{ name: "aadharFront", maxCount
         const building = await Building.findOne({ _id: buildingId, owner: ownerId });
         if (!building) return res.status(404).json({ message: "Building not found." });
         const floor = building.floors.id(floorId);
-     const room = floor?.rooms.id(roomId);
-        const bed = room?.beds.id(bedId);
+        if (!floor) return res.status(400).json({ message: "Selected floor was not found. Please select the room allocation again." });
+        const room = floor.rooms.id(roomId);
+        if (!room) return res.status(400).json({ message: "Selected room was not found. Please select the room allocation again." });
+        const bed = room.beds.id(bedId);
 
         // ✅ RESTORED: Bed Occupancy Check
-        if (!bed || bed.status === "Occupied") return res.status(400).json({ message: "Bed is already occupied." });
+        if (!bed) return res.status(400).json({ message: "Selected bed was not found. Please select another bed." });
+        if (bed.status === "Occupied") return res.status(400).json({ message: "Bed is already occupied." });
 
         const allocationInfo = {
           buildingName: building.buildingName, floorNumber: floor.floorNumber,

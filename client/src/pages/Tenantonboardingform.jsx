@@ -359,7 +359,7 @@ if (!form.email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) {
     try {
       const res = await fetch(`${API}/tenants/register-via-link`, { method: "POST", body: fd });
       const data = await res.json();
-      if (!res.ok) { setError(data.message || "Registration failed. Please try again."); return; }
+      if (!res.ok) { setError(data.error || data.message || "Registration failed. Please try again."); return; }
       setSuccessMsg(data.message);
       setPageStatus("success");
     } catch {
