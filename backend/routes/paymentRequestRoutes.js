@@ -9,8 +9,10 @@ import { v2 as cloudinary } from "cloudinary";
 import Tenant from "../models/Tenant.js";
 import RentPayment from "../models/Rentpayment.js";
 import PaymentRequest from "../models/PaymentRequest.js";
+import User from "../models/User.js";
 import { SECURE_TENANT_ID_RE } from "../utils/tenantSecureId.js";
 import { logActivity } from "../utils/activityLogger.js";
+import { sendPushToOwner } from "../utils/pushService.js";
 import { buildFullPaymentEmail, buildPartialPaymentEmail } from "./rentroutes.js";
 
 const router = express.Router();
@@ -185,6 +187,26 @@ function withAdminApprovalNote(email) {
   };
 }
 
+async function notifyOwnerPaymentRequest(ownerId, tenant, request) {
+  try {
+    const owner = await User.findById(ownerId).select("owner name");
+    const ownerName = owner?.owner || owner?.name || "there";
+    await sendPushToOwner(ownerId, {
+      title: "Payment Request",
+      body: `Hi ${ownerName}, ${tenant.name} has submitted a payment request. Please review and confirm the payment.`,
+      data: {
+        type: "payment-request",
+        paymentRequestId: String(request._id),
+        tenantId: String(tenant._id),
+        ownerId: String(ownerId),
+        submittedAt: new Date(request.createdAt || Date.now()).toISOString(),
+      },
+    });
+  } catch (err) {
+    console.error("Payment request push failed:", err.message);
+  }
+}
+
 router.post("/public/tenant/:secureId/payment-request", upload.single("receipt"), async (req, res) => {
   try {
     const secureId = String(req.params.secureId || "").trim().toLowerCase();
@@ -210,7 +232,7 @@ router.post("/public/tenant/:secureId/payment-request", upload.single("receipt")
 
     const receiptUrl = paymentMode === "online" ? await uploadReceiptToCloudinary(req.file) : "";
 
-    await PaymentRequest.create({
+    const paymentRequest = await PaymentRequest.create({
       owner: tenant.owner,
       tenantId: tenant._id,
       monthYear,
@@ -223,6 +245,8 @@ router.post("/public/tenant/:secureId/payment-request", upload.single("receipt")
       receiptUrl,
       cashGivenAt: paymentMode === "cash" ? new Date(cashGivenAt) : null,
     });
+
+    notifyOwnerPaymentRequest(tenant.owner, tenant, paymentRequest);
 
     res.status(201).json({ message: "Payment request submitted successfully. Waiting for owner approval." });
   } catch (err) {
