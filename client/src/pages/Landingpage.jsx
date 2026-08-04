@@ -5,11 +5,13 @@ import appLogo from "../assets/app-logo-transparent.png";
 import chooseVideo from "../assets/choosevideo.mp4";
 import heroSectionVideo from "../assets/herosectionvideo.mp4";
 import mobileApp1 from "../assets/mobileapp1.png";
+import mobileApp2 from "../assets/mobileapp2.png";
+import mobileApp3 from "../assets/mobileapp3.png";
 import { API } from "../api.js";
 import { useNavigate } from "react-router-dom";
 
 const APP_DOWNLOAD_URL = "https://drive.google.com/file/d/1ENS7y9i-ucrFNY5ySZ4LbkFTwEb9WzCm/view?usp=drivesdk";
-const WEB_URL = "https://nilayamhostelmanagement.in.net";
+const MOBILE_APP_IMAGES = [mobileApp1, mobileApp2, mobileApp3];
 const NAV = [
   { label: "Home", href: "#home" },
   { label: "About", href: "#about" },
@@ -87,6 +89,8 @@ export default function NilayamSite() {
   const [scrolled, setScrolled] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [chooseMuted, setChooseMuted] = useState(true);
+  const [showWhatsAppPrompt, setShowWhatsAppPrompt] = useState(false);
+  const [appSlide, setAppSlide] = useState(0);
   const [plans, setPlans] = useState([]);
   const [plansLoading, setPlansLoading] = useState(true);
   const navigate = useNavigate();
@@ -104,6 +108,47 @@ export default function NilayamSite() {
       .then((data) => setPlans(Array.isArray(data) ? data : []))
       .catch(() => setPlans([]))
       .finally(() => setPlansLoading(false));
+  }, []);
+
+  useEffect(() => {
+    const items = document.querySelectorAll(".reveal-up");
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            entry.target.classList.add("is-visible");
+            window.setTimeout(() => {
+              entry.target.style.transitionDelay = "0ms";
+            }, 800);
+            observer.unobserve(entry.target);
+          }
+        });
+      },
+      { threshold: 0.14, rootMargin: "0px 0px -40px 0px" }
+    );
+
+    items.forEach((item) => observer.observe(item));
+    return () => observer.disconnect();
+  }, [plansLoading, plans]);
+
+  useEffect(() => {
+    if (localStorage.getItem("nilayamvisit") === "true") return;
+
+    setShowWhatsAppPrompt(true);
+    const timer = window.setTimeout(() => {
+      setShowWhatsAppPrompt(false);
+      localStorage.setItem("nilayamvisit", "true");
+    }, 5000);
+
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setAppSlide((slide) => (slide + 1) % MOBILE_APP_IMAGES.length);
+    }, 2500);
+
+    return () => window.clearInterval(timer);
   }, []);
 
   const scrollTo = (href) => {
@@ -147,9 +192,10 @@ export default function NilayamSite() {
 
           <div className="nav-cta">
             <button className="btn btn-primary" onClick={() => scrollTo("#app")}>Download App</button>
+            <button className="btn btn-outline" onClick={() => navigate("/login")}>Login</button>
           </div>
 
-          <button className="hamburger" aria-label="Menu" onClick={() => setMenuOpen((s) => !s)}>
+          <button className={`hamburger ${menuOpen ? "hamburger--open" : ""}`} aria-label="Menu" onClick={() => setMenuOpen((s) => !s)}>
             <span /><span /><span />
           </button>
         </div>
@@ -161,6 +207,7 @@ export default function NilayamSite() {
             </a>
           ))}
           <button className="btn btn-primary" onClick={() => scrollTo("#app")}>Download App</button>
+          <button className="btn btn-outline" onClick={() => navigate("/login")}>Login</button>
         </div>
       </header>
 
@@ -171,6 +218,7 @@ export default function NilayamSite() {
           autoPlay
           loop
           muted
+          preload="auto"
           playsInline
           aria-hidden="true"
         />
@@ -191,9 +239,6 @@ export default function NilayamSite() {
               <button className="btn btn-primary lg" onClick={() => scrollTo("#pricing")}>Get Started</button>
               <a className="btn btn-gold lg" href={APP_DOWNLOAD_URL} download>📱 Download App</a>
             </div>
-            <a className="web-pill" href={WEB_URL} target="_blank" rel="noreferrer">
-              <span className="dot" /> nilayamhostelmanagement.in.net
-            </a>
           </div>
 
         </div>
@@ -202,9 +247,13 @@ export default function NilayamSite() {
       <section id="about" className="section">
         <div className="container">
           <SectionHead kicker="About" title="About NILAYAM" />
-          <div className="about-panel">
+          <div className="about-panel reveal-up">
             <div className="about-grid">
               <div className="about-copy">
+                <div className="highlight">
+                  <span>One Platform.</span>
+                  <strong>Complete Hostel Management.</strong>
+                </div>
                 <p>
                   NILAYAM is a modern hostel management platform built to simplify the everyday operations
                   of hostel owners and managers.
@@ -218,10 +267,6 @@ export default function NilayamSite() {
                   Our goal is to reduce manual work, improve transparency, save valuable time and help
                   hostel owners manage their properties more efficiently.
                 </p>
-                <div className="highlight">
-                  <span>One Platform.</span>
-                  <strong>Complete Hostel Management.</strong>
-                </div>
               </div>
 
               <div className="about-media">
@@ -241,7 +286,7 @@ export default function NilayamSite() {
           />
           <div className="features-grid">
             {FEATURES.map((f, i) => (
-              <article key={f.title} className="feature-card glass" style={{ animationDelay: `${i * 40}ms` }}>
+              <article key={f.title} className="feature-card glass reveal-up" style={{ transitionDelay: `${i * 40}ms` }}>
                 <div className="feature-head">
                   <div className="fc-icon">{f.icon}</div>
                   <h3>{f.title}</h3>
@@ -261,13 +306,13 @@ export default function NilayamSite() {
               {[
                 "Simple to Use", "Saves Time", "Reduces Manual Work", "Better Rent Tracking",
                 "Clear Reports & Insights", "Smart Notifications", "Centralized Management", "Built for Modern Hostel Owners",
-              ].map((w) => (
-                <div key={w} className="why-item">
+              ].map((w, i) => (
+                <div key={w} className="why-item reveal-up" style={{ transitionDelay: `${i * 40}ms` }}>
                   <span className="tick">✓</span>{w}
                 </div>
               ))}
             </div>
-            <div className="choose-video-wrap">
+            <div className="choose-video-wrap reveal-up">
               <video
                 className="choose-video"
                 src={chooseVideo}
@@ -309,7 +354,15 @@ export default function NilayamSite() {
             <span className="android-tag">▲ Available for Android</span>
           </div>
           <div className="app-phone-preview">
-            <img src={mobileApp1} alt="Nilayam mobile app screen" />
+            <div className="app-phone-carousel">
+              <div className="app-phone-track" style={{ transform: `translateX(-${appSlide * 100}%)` }}>
+                {MOBILE_APP_IMAGES.map((image, index) => (
+                  <div className="app-phone-slide" key={image}>
+                    <img src={image} alt={`Nilayam mobile app screen ${index + 1}`} />
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
       </section>
@@ -325,22 +378,22 @@ export default function NilayamSite() {
           {plansLoading ? (
             <div className="pricing-grid">
               {[1, 2, 3].map((n) => (
-                <div key={n} className="price-card price-card--loading" />
+                <div key={n} className="price-card price-card--loading reveal-up" style={{ transitionDelay: `${(n - 1) * 60}ms` }} />
               ))}
             </div>
           ) : plans.length === 0 ? (
-            <div className="pricing-empty glass">
+            <div className="pricing-empty glass reveal-up">
               <strong>No active plans available right now.</strong>
               <span>Please check back soon or contact the NILAYAM team.</span>
             </div>
           ) : (
             <div className={`pricing-grid ${plans.length === 1 ? "pricing-grid--single" : ""}`}>
               {plans.map((plan, index) => (
-                <article key={plan._id || plan.name} className={`price-card ${index === 1 ? "price-card--featured" : ""}`}>
+                <article key={plan._id || plan.name} className={`price-card reveal-up ${index === 1 ? "price-card--featured" : ""}`} style={{ transitionDelay: `${index * 60}ms` }}>
                   {index === 1 && <span className="price-ribbon">Popular</span>}
                   <div className="price-head">
                     <span className="price-name">{plan.name}</span>
-                    <span className="price-beds">{plan.beds} beds</span>
+
                   </div>
                   <div className="price-value">
                     {plan.isFree || Number(plan.price) === 0 ? (
@@ -378,7 +431,7 @@ export default function NilayamSite() {
               ["03", "Manage Rent", "Track rent, payments, pending dues and overdue amounts."],
               ["04", "Manage Everything", "Monitor complete hostel operations from one dashboard."],
             ].map(([n, t, d]) => (
-              <div key={n} className="step glass">
+              <div key={n} className="step glass reveal-up" style={{ transitionDelay: `${(Number(n) - 1) * 60}ms` }}>
                 <span className="step-num">{n}</span>
                 <h4>{t}</h4>
                 <p>{d}</p>
@@ -400,7 +453,7 @@ export default function NilayamSite() {
               ["📱", "Stay Connected", "Keep tenants informed with reminders and notifications."],
               ["🚀", "Grow Your Business", "Focus on growth while NILAYAM manages daily operations."],
             ].map(([i, t, d]) => (
-              <div key={t} className="benefit glass">
+              <div key={t} className="benefit glass reveal-up">
                 <span className="b-ico">{i}</span>
                 <h4>{t}</h4>
                 <p>{d}</p>
@@ -434,9 +487,6 @@ export default function NilayamSite() {
             <a className="btn btn-gold lg" href={APP_DOWNLOAD_URL} download target="_blank" rel="noreferrer">
               📱 Download NILAYAM App
             </a>
-            <a className="btn btn-outline-light lg" href={WEB_URL} target="_blank" rel="noreferrer">
-              Visit Web App
-            </a>
           </div>
         </div>
       </section>
@@ -448,20 +498,20 @@ export default function NilayamSite() {
             Have questions or want to learn more about NILAYAM? Get in touch with us.
           </p>
           <div className="contact-cards">
-            <a href="tel:9346178913" className="c-card glass">
+            <a href="tel:9346178913" className="c-card glass reveal-up">
               <span>📞</span>
               <strong>+91 93461 78913</strong>
               <em>Call us anytime</em>
             </a>
-            <a href="tel:9515174064" className="c-card glass">
+            <a href="tel:9515174064" className="c-card glass reveal-up">
               <span>📞</span>
               <strong>+91 95151 74064</strong>
               <em>Talk to our team</em>
             </a>
-            <a href={WEB_URL} target="_blank" rel="noreferrer" className="c-card glass">
-              <span>🌐</span>
-              <strong>nilayamhostelmanagement.in.net</strong>
-              <em>Visit our web app</em>
+            <a href="mailto:nilayamhostelmanagment@gmail.com" className="c-card glass reveal-up">
+              <span>✉</span>
+              <strong>nilayamhostelmanagment@gmail.com</strong>
+              <em>Email us</em>
             </a>
           </div>
         </div>
@@ -493,7 +543,6 @@ export default function NilayamSite() {
             <h5>Get NILAYAM</h5>
             <ul>
               <li><a href={APP_DOWNLOAD_URL} download>📱 Download Android App</a></li>
-              <li><a href={WEB_URL} target="_blank" rel="noreferrer">🌐 Web App</a></li>
               <li><a href="tel:9346178913">📞 +91 93461 78913</a></li>
               <li><a href="tel:9515174064">📞 +91 95151 74064</a></li>
             </ul>
@@ -501,6 +550,25 @@ export default function NilayamSite() {
         </div>
         <div className="copy">© 2026 NILAYAM HOSTEL MANAGEMENT. All rights reserved.</div>
       </footer>
+
+      <a
+        className={`whatsapp-float ${showWhatsAppPrompt ? "whatsapp-float--prompt" : ""}`}
+        href="https://wa.me/919515174064"
+        target="_blank"
+        rel="noreferrer"
+        aria-label="Contact NILAYAM on WhatsApp"
+      >
+        <span className="whatsapp-prompt">
+          <strong>Have a Question?</strong>
+          <em>Contact Us now</em>
+        </span>
+        <span className="whatsapp-icon">
+          <svg viewBox="0 0 32 32" aria-hidden="true">
+            <path d="M16.02 4.3c-6.48 0-11.74 5.2-11.74 11.61 0 2.2.63 4.34 1.82 6.18L4.2 29l7.14-1.86a11.86 11.86 0 0 0 4.68 1c6.48 0 11.74-5.2 11.74-11.62S22.5 4.3 16.02 4.3Zm0 21.86c-1.48 0-2.93-.32-4.25-.96l-.3-.15-4.23 1.1 1.13-4.05-.2-.32a10.03 10.03 0 0 1-1.61-5.47c0-5.31 4.36-9.63 9.72-9.63 5.35 0 9.72 4.32 9.72 9.63 0 5.53-4.36 9.85-9.98 9.85Z" />
+            <path d="M21.58 18.78c-.3-.15-1.77-.87-2.04-.96-.27-.1-.47-.15-.67.15-.2.3-.77.96-.95 1.16-.17.2-.35.22-.65.07-.3-.15-1.27-.46-2.42-1.48-.9-.8-1.5-1.78-1.67-2.08-.18-.3-.02-.46.13-.61.14-.14.3-.35.45-.52.15-.18.2-.3.3-.5.1-.2.05-.37-.02-.52-.08-.15-.67-1.6-.92-2.2-.24-.58-.49-.5-.67-.51h-.57c-.2 0-.52.07-.8.37-.27.3-1.04 1-1.04 2.45s1.07 2.86 1.22 3.06c.15.2 2.1 3.18 5.1 4.46.71.3 1.27.49 1.7.63.72.23 1.37.2 1.88.12.57-.08 1.77-.72 2.02-1.4.25-.69.25-1.28.17-1.4-.07-.13-.27-.2-.57-.35Z" />
+          </svg>
+        </span>
+      </a>
     </div>
   );
 }
@@ -676,6 +744,8 @@ const CSS = `
 @keyframes float{0%,100%{transform:translate(0,0)}50%{transform:translate(30px,-40px)}}
 
 .nly-root > *:not(.nly-bg):not(.nav){position:relative;z-index:1}
+.reveal-up{opacity:0;transform:translateY(38px);transition:opacity .7s ease,transform .7s cubic-bezier(.22,1,.36,1)}
+.reveal-up.is-visible{opacity:1;transform:translateY(0)}
 
 .nav{position:fixed;top:0;left:0;right:0;width:100%;z-index:9999;transition:box-shadow .3s ease;padding:14px 0;background:#fff;border-bottom:1px solid var(--line);box-shadow:0 10px 30px -24px rgba(15,42,90,.18)}
 .nav--solid{background:#fff;border-bottom-color:var(--line);box-shadow:0 10px 30px -20px rgba(15,42,90,.25)}
@@ -691,8 +761,14 @@ const CSS = `
 .nav-links a::after{content:"";position:absolute;left:0;right:0;bottom:-6px;height:2px;background:linear-gradient(90deg,var(--blue),var(--teal));transform:scaleX(0);transform-origin:left;transition:transform .3s}
 .nav-links a:hover::after{transform:scaleX(1)}
 .nav-cta{display:flex;gap:10px}
-.hamburger{display:none;background:transparent;border:0;padding:8px;cursor:pointer}
-.hamburger span{display:block;width:22px;height:2px;background:var(--navy);margin:4px 0;border-radius:2px}
+.hamburger{display:none;background:transparent;border:0;padding:8px;cursor:pointer;width:38px;height:38px;position:relative}
+.hamburger span{position:absolute;left:8px;display:block;width:22px;height:2px;background:var(--navy);border-radius:2px;transition:transform .25s ease,opacity .2s ease,top .25s ease}
+.hamburger span:nth-child(1){top:11px}
+.hamburger span:nth-child(2){top:18px}
+.hamburger span:nth-child(3){top:25px}
+.hamburger--open span:nth-child(1){top:18px;transform:rotate(45deg)}
+.hamburger--open span:nth-child(2){opacity:0;transform:scaleX(0)}
+.hamburger--open span:nth-child(3){top:18px;transform:rotate(-45deg)}
 .mobile-menu{display:flex;flex-direction:column;gap:12px;max-height:0;opacity:0;overflow:hidden;padding:0 24px;background:rgba(255,255,255,.95);backdrop-filter:blur(20px);border-bottom:0 solid transparent;transform:translateY(-8px);transition:max-height .32s ease,opacity .24s ease,transform .32s ease,padding .32s ease,border-color .32s ease}
 .mobile-menu--open{max-height:420px;opacity:1;padding:18px 24px 20px;border-bottom-width:1px;border-bottom-color:var(--line);transform:translateY(0)}
 .mobile-menu a{color:var(--ink);font-weight:500;padding:8px 0;border-bottom:1px solid var(--line)}
@@ -713,16 +789,15 @@ const CSS = `
 .link-btn{background:transparent;border:0;color:var(--blue);font-weight:600;cursor:pointer;font-family:inherit;font-size:15px}
 .link-btn:hover{text-decoration:underline}
 
-.hero{position:relative;min-height:100vh;padding:126px 0 96px;overflow:hidden;background:#eef5ff}
-.hero-video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:0}
+.hero{position:relative;min-height:100vh;padding:126px 0 96px;overflow:hidden;background:#07172f}
+.hero-video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:0;background:#07172f}
 .hero-video-overlay{display:none}
 .hero-grid{position:relative;z-index:2;display:grid;grid-template-columns:minmax(0,660px);gap:0;align-items:start;max-width:none;padding-left:clamp(42px,5vw,96px);padding-right:24px}
 .hero-copy{max-width:660px}
 .hero .h1{color:#f7fbff;text-shadow:0 8px 28px rgba(1,9,28,.62)}
 .hero .sub{color:#eaf6ff;text-shadow:0 4px 18px rgba(1,9,28,.55)}
-.hero .desc{color:#c8d8ea;text-shadow:0 3px 14px rgba(1,9,28,.58)}
+.hero .desc{color:#fff;text-shadow:0 3px 14px rgba(1,9,28,.58)}
 .hero .link-btn{color:#66d9ff;text-shadow:0 3px 14px rgba(1,9,28,.55)}
-.hero .web-pill{color:#d8e8f8;background:rgba(4,16,40,.32);backdrop-filter:blur(8px)}
 .badge{display:inline-flex;align-items:center;gap:8px;background:rgba(59,123,255,.1);color:var(--navy-3);font-weight:700;font-size:12px;letter-spacing:1.5px;padding:8px 14px;border-radius:999px;border:1px solid rgba(59,123,255,.25);margin-bottom:22px;animation:pulse 2.4s infinite}
 @keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(59,123,255,.4)}50%{box-shadow:0 0 0 12px rgba(59,123,255,0)}}
 .h1{font-family:'Inter Tight',sans-serif;font-weight:800;font-size:clamp(38px,5.2vw,68px);line-height:1.02;letter-spacing:-.03em;margin:0 0 20px}
@@ -732,9 +807,6 @@ const CSS = `
 .desc{color:var(--muted);font-size:16px;line-height:1.6;max-width:560px;margin:0 0 28px}
 .cta-row{display:flex;gap:14px;align-items:center;flex-wrap:wrap}
 .cta-row.center{justify-content:center}
-.web-pill{display:inline-flex;align-items:center;gap:10px;margin-top:22px;font-size:14px;color:var(--muted);padding:8px 14px;background:rgba(15,42,90,.05);border-radius:999px}
-.web-pill .dot{width:8px;height:8px;border-radius:50%;background:#2ec4a2;box-shadow:0 0 10px #2ec4a2;animation:pulse 2s infinite}
-
 .hero-visual{position:relative;min-height:520px}
 .hero-visual.center{display:flex;justify-content:center;align-items:center}
 
@@ -829,7 +901,7 @@ const CSS = `
 .about-grid{display:grid;grid-template-columns:1.12fr .88fr;gap:36px;align-items:center}
 .p-lg{padding:36px}
 .about-copy p{margin:0 0 14px;color:var(--muted);line-height:1.7;font-size:16px}
-.highlight{margin-top:22px;padding:20px;border-radius:16px;background:linear-gradient(135deg,rgba(59,123,255,.08),rgba(93,201,193,.08));border:1px dashed rgba(59,123,255,.35)}
+.highlight{margin:0 0 22px;padding:20px;border-radius:16px;background:linear-gradient(135deg,rgba(59,123,255,.08),rgba(93,201,193,.08));border:1px dashed rgba(59,123,255,.35)}
 .highlight span{display:block;font-size:14px;color:var(--muted);font-weight:600}
 .highlight strong{display:block;font-family:'Inter Tight';font-size:22px;font-weight:800;color:var(--navy);margin-top:4px}
 .about-media{position:relative;overflow:hidden;border-radius:18px;background:#dfeaf7;box-shadow:0 18px 48px -28px rgba(15,42,90,.45);aspect-ratio:4/3}
@@ -846,7 +918,7 @@ const CSS = `
 .flow-node span{font-weight:700;color:var(--navy);letter-spacing:1px;font-size:13px}
 
 .features-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:22px}
-.feature-card{padding:26px;transition:all .35s cubic-bezier(.4,0,.2,1);cursor:default;opacity:0;animation:rise .6s ease-out forwards}
+.feature-card{padding:26px;transition:opacity .7s ease,transform .7s cubic-bezier(.22,1,.36,1),box-shadow .35s cubic-bezier(.4,0,.2,1);cursor:default}
 @keyframes rise{from{opacity:0;transform:translateY(24px)}to{opacity:1;transform:translateY(0)}}
 .feature-card:hover{transform:translateY(-6px);box-shadow:0 30px 60px -20px rgba(15,42,90,.28)}
 .feature-head{display:flex;align-items:center;gap:14px;margin-bottom:14px}
@@ -886,7 +958,10 @@ const CSS = `
 .sub-left{font-size:20px;font-weight:600;color:var(--navy);margin:0 0 14px}
 .android-tag{display:inline-block;margin-top:16px;font-size:12px;color:var(--muted);font-weight:600;letter-spacing:1px}
 .app-phone-preview{height:min(82vh,720px);min-height:650px;overflow:visible;display:flex;align-items:center;justify-content:flex-end}
-.app-phone-preview img{width:auto;height:100%;max-height:90%;max-width:100%;display:block;object-fit:contain}
+.app-phone-carousel{width:100%;height:100%;overflow:hidden}
+.app-phone-track{height:100%;display:flex;transition:transform .75s cubic-bezier(.22,1,.36,1)}
+.app-phone-slide{height:100%;min-width:100%;display:flex;align-items:center;justify-content:flex-end}
+.app-phone-slide img{width:auto;height:100%;max-height:90%;max-width:100%;display:block;object-fit:contain}
 
 .steps{display:grid;grid-template-columns:repeat(4,1fr);gap:22px;position:relative}
 .step{padding:28px;position:relative;transition:all .3s}
@@ -965,6 +1040,17 @@ const CSS = `
 .c-card strong{font-family:'Inter Tight';font-size:18px;color:var(--navy);margin-bottom:4px}
 .c-card em{font-style:normal;font-size:13px;color:var(--muted)}
 
+.whatsapp-float{position:fixed!important;right:28px!important;bottom:34px!important;z-index:2147483647!important;display:flex;align-items:center;gap:14px;color:inherit;text-decoration:none;pointer-events:auto}
+.whatsapp-icon{width:68px;height:68px;border-radius:50%;background:#05c331;color:#fff;display:grid;place-items:center;border:6px solid #fff;box-shadow:0 14px 34px -14px rgba(0,0,0,.55);transition:transform .22s ease,box-shadow .22s ease}
+.whatsapp-icon svg{width:38px;height:38px;display:block;fill:currentColor}
+.whatsapp-float:hover .whatsapp-icon{transform:translateY(-3px) scale(1.03);box-shadow:0 18px 38px -14px rgba(0,0,0,.62)}
+.whatsapp-prompt{position:relative;display:flex;flex-direction:column;gap:3px;background:#e7e5e5;color:#0f172a;border-radius:12px;padding:13px 24px;box-shadow:8px 10px 0 rgba(0,0,0,.08);opacity:0;visibility:hidden;transform:translateX(10px);transition:opacity .22s ease,visibility .22s ease,transform .22s ease}
+.whatsapp-float--prompt .whatsapp-prompt,.whatsapp-float:hover .whatsapp-prompt,.whatsapp-float:focus-visible .whatsapp-prompt{opacity:1;visibility:visible;transform:translateX(0)}
+.whatsapp-prompt::after{content:"";position:absolute;right:-17px;top:50%;transform:translateY(-50%);border-width:8px 0 8px 18px;border-style:solid;border-color:transparent transparent transparent #e7e5e5}
+.whatsapp-prompt strong{font-size:14px;font-weight:500;line-height:1.15}
+.whatsapp-prompt em{font-style:normal;font-size:14px;line-height:1.15}
+@keyframes promptIn{from{opacity:0;transform:translateX(10px)}to{opacity:1;transform:translateX(0)}}
+
 .footer{background:linear-gradient(180deg,#0a1830,#050d1f);color:#fff;padding:56px 0 28px;margin-top:50px}
 .footer .brand-text strong{color:#fff}
 .footer .brand-text em{color:rgba(255,255,255,.55)}
@@ -983,6 +1069,7 @@ const CSS = `
   .app-section{min-height:auto}
   .app-grid{min-height:auto}
   .app-phone-preview{height:580px;min-height:0;justify-content:center}
+  .app-phone-slide{justify-content:center}
   .features-grid,.benefits-grid{grid-template-columns:repeat(2,1fr)}
   .steps{grid-template-columns:repeat(2,1fr)}
   .why-showcase{grid-template-columns:1fr}
@@ -1005,6 +1092,10 @@ const CSS = `
   .why-item{height:84px}
   .choose-video-wrap{height:280px}
   .app-phone-preview{height:480px;min-height:0}
+  .whatsapp-float{right:16px!important;bottom:24px!important;gap:10px}
+  .whatsapp-icon{width:60px;height:60px;border-width:5px}
+  .whatsapp-icon svg{width:34px;height:34px}
+  .whatsapp-prompt{padding:11px 18px}
   .section{padding:52px 0}
   .hero{padding:106px 0 60px}
   .about-panel{padding:20px;border-radius:18px}

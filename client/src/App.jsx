@@ -30,6 +30,8 @@ import LandingPage from "./pages/Landingpage.jsx";
 import MasterPlanMonitor from "./pages/master/Masterplanmonitor.jsx";
 import AutoMailSettings from "./pages/Automailsettings.jsx";
 import MasterAutomailSettings from "./pages/master/MasterAutomailSettings.jsx";
+import PublicTenantRentDetails from "./pages/PublicTenantRentDetails.jsx";
+import PaymentRequests from "./pages/PaymentRequests.jsx";
 
 // ── Auth guards ───────────────────────────────────────────────────────────────
 function RequireUser({ children }) {
@@ -61,6 +63,7 @@ export default function App() {
       {/* ── Tenant self-registration (no auth — uses link token in URL) ── */}
       {/* Owner shares: http://yourapp/tenant-register/<JWT>               */}
       <Route path="/tenant-register/:token" element={<TenantOnboardingForm />} />
+      <Route path="/tenant/rent/:secureId" element={<PublicTenantRentDetails />} />
 
       {/* ── Regular user routes wrapped in Layout ──────────────────────── */}
       <Route path="/dashboard" element={
@@ -89,6 +92,9 @@ export default function App() {
       } />
                     <Route path="/automail-settings" element={
         <RequireUser><Layout><AutoMailSettings/></Layout></RequireUser>
+      } />
+                    <Route path="/payment-requests" element={
+        <RequireUser><Layout><PaymentRequests/></Layout></RequireUser>
       } />
 
       {/* ── Master routes wrapped in MasterLayout ──────────────────────── */}

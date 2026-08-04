@@ -1,8 +1,12 @@
 import mongoose from "mongoose";
+import crypto from "crypto";
+
+const createSecureId = () => crypto.randomBytes(16).toString("hex");
 
 const TenantSchema = new mongoose.Schema(
   {
     owner: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+    secureId: { type: String, unique: true, sparse: true, index: true, select: false },
     name: { type: String, required: true },
     phone: { type: String, required: true },
     email: { type: String },
@@ -42,6 +46,11 @@ const TenantSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+
+TenantSchema.pre("validate", function (next) {
+  if (!this.secureId) this.secureId = createSecureId();
+  next();
+});
 
 TenantSchema.index({ owner: 1, createdAt: -1 });
 TenantSchema.index({ owner: 1, source: 1, createdAt: -1 });

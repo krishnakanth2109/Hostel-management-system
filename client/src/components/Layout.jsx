@@ -8,6 +8,7 @@ import {
   Building2,
   UserPlus,
   ReceiptIndianRupee,
+  CreditCard,
   LogOut,
   Menu,
   X,
@@ -30,6 +31,7 @@ import {
 const NAV = [
   { to: "/dashboard",          label: "Dashboard",           icon: <LayoutDashboard size={20} /> },
   { to: "/rent-management",    label: "Rent Management",     icon: <ReceiptIndianRupee size={20} /> },
+  { to: "/payment-requests",   label: "Payment Requests",    icon: <CreditCard size={20} /> },
   { to: "/addcandidate",       label: "Add Candidate",       icon: <UserPlus size={20} /> },
   { to: "/candidates",         label: "Total Candidates",    icon: <Users size={20} /> },
   { to: "/addhostel",          label: "Property Management", icon: <Building2 size={20} /> },

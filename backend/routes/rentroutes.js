@@ -10,6 +10,7 @@ import Tenant from "../models/Tenant.js";
 import Building from "../models/Building.js";
 import RentPayment from "../models/Rentpayment.js";
 import { logActivity } from "../utils/activityLogger.js";
+import { ensureTenantSecureId } from "../utils/tenantSecureId.js";
 
 const router = express.Router();
 
@@ -369,6 +370,11 @@ function isDueAlert({ hasPreviousPending, remaining, isOverdue, daysUntilDue, ad
 
 const FIVE_DAYS_MS = 5 * 24 * 60 * 60 * 1000;
 
+function buildTenantRentLink(secureId) {
+  const frontendUrl = (process.env.FRONTEND_URL || "http://localhost:5173").replace(/\/$/, "");
+  return `${frontendUrl}/tenant/rent/${secureId}`;
+}
+
 // ── Email Template Helpers ───────────────────────────────────────────────────
 const fmtINR = (n) => new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(n);
 const fmtDate = (d) => d ? new Date(d).toLocaleDateString("en-IN", { day: "2-digit", month: "long", year: "numeric" }) : "—";
@@ -517,7 +523,26 @@ function buildRoomAllocationSection(buildingDetails) {
     </div>`;
 }
 
-function buildReminderEmail({ tenant, record, buildingDetails, isOverdue, daysOverdue, daysUntilDue, pendingMonths = [], arrearsTotal = 0, totalAccumulatedDue = 0, advancePending = 0 }) {
+function buildRentDetailsCta(detailsLink) {
+  if (!detailsLink) return "";
+  return `
+    <p class="sub-text" style="margin-bottom:12px;">Review your rent details. If you have already paid, please submit your payment proof or cash payment request for verification.</p>
+    <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="background:#f8fbff;border:1px solid #dbeafe;border-radius:10px;margin:0 0 22px;">
+      <tr>
+        <td align="center" style="padding:18px 16px;">
+          <a href="${detailsLink}" target="_blank" rel="noopener" style="display:inline-block;background:#2563eb;color:#ffffff;text-decoration:none;border-radius:8px;padding:11px 18px;font-size:14px;font-weight:800;line-height:1.25;box-shadow:0 3px 10px rgba(37,99,235,0.22);">
+            <span style="vertical-align:middle;">Submit Payment Request</span>
+            <span style="display:inline-block;margin-left:8px;vertical-align:middle;">→</span>
+          </a>
+          <div style="color:#475569;font-size:12px;line-height:1.5;margin-top:10px;max-width:360px;">
+            Opens your profile to request payment approval.
+          </div>
+        </td>
+      </tr>
+    </table>`;
+}
+
+function buildReminderEmail({ tenant, record, buildingDetails, isOverdue, daysOverdue, daysUntilDue, pendingMonths = [], arrearsTotal = 0, totalAccumulatedDue = 0, advancePending = 0, detailsLink = "" }) {
   const remaining = record ? record.rentAmount - record.paidAmount : 0;
   const month = record?.dueDate
     ? new Date(record.dueDate).toLocaleString("en-IN", { month: "long", year: "numeric" })
@@ -611,6 +636,7 @@ function buildReminderEmail({ tenant, record, buildingDetails, isOverdue, daysOv
       <div>${statusPill}</div>
       ${totalsBreakdown}
     </div>
+    ${buildRentDetailsCta(detailsLink)}
     ${paymentDetailsHtml}
     ${arrearsHtml}
     ${buildTenantDetailsSection(tenant, accentColor)}
@@ -634,7 +660,7 @@ function buildReminderEmail({ tenant, record, buildingDetails, isOverdue, daysOv
   return { subject, html: emailWrapper({ accentColor, icon, title, badgeLabel, bodyHtml }) };
 }
 
-function buildFullPaymentEmail({ tenant, record, paymentAmount, buildingDetails }) {
+export function buildFullPaymentEmail({ tenant, record, paymentAmount, buildingDetails, adminApproved = false }) {
   const month = new Date(record.dueDate).toLocaleString("en-IN", { month: "long", year: "numeric" });
   const accentColor = "#276749";
 
@@ -665,7 +691,7 @@ function buildFullPaymentEmail({ tenant, record, paymentAmount, buildingDetails 
   };
 }
 
-function buildPartialPaymentEmail({ tenant, record, paymentAmount, buildingDetails }) {
+export function buildPartialPaymentEmail({ tenant, record, paymentAmount, buildingDetails, adminApproved = false }) {
   const remaining = record.rentAmount - record.paidAmount;
   const month = new Date(record.dueDate).toLocaleString("en-IN", { month: "long", year: "numeric" });
   const accentColor = "#d97706";
@@ -860,8 +886,15 @@ async function sendBrevoEmail(toEmail, toName, subject, htmlContent) {
       headers: { "Content-Type": "application/json", "api-key": apiKey },
     });
     return data;
-  } catch {
-    throw new Error("Email send failed");
+  } catch (err) {
+    const providerMessage =
+      err.response?.data?.message ||
+      err.response?.data?.error ||
+      err.response?.data?.code ||
+      err.message ||
+      "Email send failed";
+    console.error("[RentReminder] Brevo email failed:", providerMessage);
+    throw new Error(providerMessage);
   }
 }
 
@@ -1234,7 +1267,7 @@ router.patch("/payment-correction", auth, async (req, res) => {
 router.post("/send-reminder", auth, async (req, res) => {
   try {
     const { tenantId } = req.body;
-    const tenant = await Tenant.findOne({ _id: tenantId, owner: req.user.id }).lean();
+    const tenant = await Tenant.findOne({ _id: tenantId, owner: req.user.id }).select("+secureId").lean();
     if (!tenant?.email) return res.status(422).json({ message: "No email." });
 
     const summary = await buildTenantSummary(tenant, req.user.id, FIVE_DAYS_MS);
@@ -1244,13 +1277,16 @@ router.post("/send-reminder", auth, async (req, res) => {
 
     // 1. Fetch building details
     const buildingDetails = await getBuildingDetailsForTenant(tenant);
+    const secureId = await ensureTenantSecureId(tenant);
+    const detailsLink = buildTenantRentLink(secureId);
 
     // 2. Generate the email content using the reminder template
     const { subject, html } = buildReminderEmail({ 
       tenant, 
       record: summary.currentRecord, 
       buildingDetails, 
-      ...summary 
+      ...summary,
+      detailsLink,
     });
 
     // 3. Send the email

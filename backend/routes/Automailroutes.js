@@ -12,6 +12,7 @@ import RentPayment from "../models/Rentpayment.js";
 import AutoMailConfig from "../models/Automailconfig.js";
 import Building from "../models/Building.js";
 import User from "../models/User.js";
+import { ensureTenantSecureId } from "../utils/tenantSecureId.js";
 
 const router = express.Router();
 
@@ -69,6 +70,11 @@ async function sendBrevoEmail(toEmail, toName, subject, htmlContent) {
 
 const FIVE_DAYS_MS = 5 * 24 * 60 * 60 * 1000;
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+function buildTenantRentLink(secureId) {
+  const frontendUrl = (process.env.FRONTEND_URL || "http://localhost:5173").replace(/\/$/, "");
+  return `${frontendUrl}/tenant/rent/${secureId}`;
+}
 
 function isSameDay(d1, d2) {
   return d1.getFullYear() === d2.getFullYear() &&
@@ -437,7 +443,26 @@ function buildRoomAllocationSection(buildingDetails) {
     </div>`;
 }
 
-function buildReminderEmail({ tenant, record, buildingDetails, isOverdue, daysOverdue, daysUntilDue, pendingMonths = [], arrearsTotal = 0, totalAccumulatedDue = 0, advancePending = 0 }) {
+function buildRentDetailsCta(detailsLink) {
+  if (!detailsLink) return "";
+  return `
+    <p class="sub-text" style="margin-bottom:12px;">Review your rent details and submit payment proof or cash payment request securely.</p>
+    <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="background:#f8fbff;border:1px solid #dbeafe;border-radius:10px;margin:0 0 22px;">
+      <tr>
+        <td align="center" style="padding:18px 16px;">
+          <a href="${detailsLink}" target="_blank" rel="noopener" style="display:inline-block;background:#2563eb;color:#ffffff;text-decoration:none;border-radius:8px;padding:11px 18px;font-size:14px;font-weight:800;line-height:1.25;box-shadow:0 3px 10px rgba(37,99,235,0.22);">
+            <span style="vertical-align:middle;">View Rent Details</span>
+            <span style="display:inline-block;margin-left:8px;vertical-align:middle;">→</span>
+          </a>
+          <div style="color:#475569;font-size:12px;line-height:1.5;margin-top:10px;max-width:360px;">
+            Opens your secure rent page to request payment approval.
+          </div>
+        </td>
+      </tr>
+    </table>`;
+}
+
+function buildReminderEmail({ tenant, record, buildingDetails, isOverdue, daysOverdue, daysUntilDue, pendingMonths = [], arrearsTotal = 0, totalAccumulatedDue = 0, advancePending = 0, detailsLink = "" }) {
   const remaining = record.rentAmount - record.paidAmount;
   const month = new Date(record.dueDate).toLocaleString("en-IN", { month: "short", year: "numeric" });
   const hasPreviousPending = pendingMonths.length > 0;
@@ -504,6 +529,7 @@ function buildReminderEmail({ tenant, record, buildingDetails, isOverdue, daysOv
       <div>${statusPill}</div>
       ${totalsBreakdown}
     </div>
+    ${buildRentDetailsCta(detailsLink)}
     
     <div class="section-title">📅 Current Billing Cycle</div>
     <div class="info-card">
@@ -580,7 +606,7 @@ async function runEmailJobForOwner(ownerId, targetType, force = false) {
   if (targetType === "upcoming" && !config.sendUpcoming) return;
   if (targetType === "advance" && !config.sendAdvancePending) return;
 
-  const tenants = await Tenant.find({ owner: ownerId, status: "Active" }).lean();
+  const tenants = await Tenant.find({ owner: ownerId, status: "Active" }).select("+secureId").lean();
   console.log(`[AutoMail] Running job for owner ${ownerId} | Type: ${targetType.toUpperCase()}`);
 
   let emailsSent = 0;
@@ -615,9 +641,11 @@ async function runEmailJobForOwner(ownerId, targetType, force = false) {
       if (dueType !== targetType) continue;
 
       const buildingDetails = await getBuildingDetailsForTenant(tenant);
+      const secureId = await ensureTenantSecureId(tenant);
+      const detailsLink = buildTenantRentLink(secureId);
       const { subject, html } = advanceOnlyDue
         ? buildAdvancePendingEmail({ tenant, buildingDetails, ...summary })
-        : buildReminderEmail({ tenant, record: summary.currentRecord, buildingDetails, ...summary });
+        : buildReminderEmail({ tenant, record: summary.currentRecord, buildingDetails, ...summary, detailsLink });
 
       await sendBrevoEmail(tenant.email, tenant.name, subject, html);
 

@@ -228,7 +228,14 @@ function EmailReminderButton({ tenantId, tenantEmail, hasPreviousPending = false
       const r = await fetch(`${API}/rent/send-reminder`, {
         method: "POST", headers: authHeader(), body: JSON.stringify({ tenantId }),
       });
-      if (!r.ok) throw new Error("Failed to send email.");
+      if (!r.ok) {
+        let message = "Failed to send email.";
+        try {
+          const data = await r.json();
+          message = data.message || message;
+        } catch {}
+        throw new Error(message);
+      }
       setState("sent");
       timerRef.current = setTimeout(() => setState("idle"), 3000);
     } catch (err) {
@@ -240,7 +247,7 @@ function EmailReminderButton({ tenantId, tenantEmail, hasPreviousPending = false
 
   const baseClass = "flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-semibold border transition-all duration-200 select-none";
   if (state === "sent")    return <button disabled className={`${baseClass} bg-emerald-50 border-emerald-200 text-emerald-700 ${className}`}>Sent ✓</button>;
-  if (state === "error")   return <button onClick={handleSend} className={`${baseClass} bg-rose-50 border-rose-200 text-rose-700 ${className}`}>Failed</button>;
+  if (state === "error")   return <button onClick={handleSend} title={errMsg} className={`${baseClass} bg-rose-50 border-rose-200 text-rose-700 ${className}`}>Failed</button>;
   if (state === "sending") return <button disabled className={`${baseClass} bg-violet-50 border-violet-200 text-violet-500 opacity-75 ${className}`}>Sending…</button>;
 
   const btnStyle = advanceOnly

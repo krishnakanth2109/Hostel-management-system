@@ -15,10 +15,13 @@ import activityRoutes from "./routes/activityRoutes.js";
 import planRoutes from "./routes/planroutes.js";
 import approvalRoutes from "./routes/approvalroutes.js";
 import pushTokenRoutes from "./routes/pushTokenRoutes.js";
+import publicTenantRoutes from "./routes/publicTenantRoutes.js";
+import paymentRequestRoutes from "./routes/paymentRequestRoutes.js";
 import path from "path";
 import { fileURLToPath } from "url";
 import autoMailRouter, { initAllCronJobs } from "./routes/Automailroutes.js";
 import { initFirebase } from "./config/firebase.js";
+import { backfillTenantSecureIds } from "./utils/tenantSecureId.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname  = path.dirname(__filename);
@@ -70,6 +73,9 @@ mongoose.connect(process.env.MONGO_URL)
 
 // 👇 Run cron ONLY after DB is ready
 mongoose.connection.once("open", () => {
+  backfillTenantSecureIds().catch((err) => {
+    console.error("[TenantSecureId] Backfill failed:", err.message);
+  });
   initAllCronJobs();
 });
 
@@ -415,6 +421,8 @@ app.use("/api/plans",      planRoutes);
 app.use("/api/approval",   approvalRoutes);
 app.use("/api/auto-mail", autoMailRouter);
 app.use("/api/push-tokens", pushTokenRoutes);
+app.use("/api/public", publicTenantRoutes);
+app.use("/api/payment-requests", paymentRequestRoutes);
 
 // ── Push notifications ──────────────────────────────────────────────────────
 // Initialise Firebase Admin at startup (no-op + warning if not configured).
