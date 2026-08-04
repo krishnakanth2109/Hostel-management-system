@@ -72,7 +72,7 @@ const FIVE_DAYS_MS = 5 * 24 * 60 * 60 * 1000;
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function buildTenantRentLink(secureId) {
-  const frontendUrl = (process.env.FRONTEND_URL || "http://localhost:5173").replace(/\/$/, "");
+  const frontendUrl = (process.env.FRONTEND_URL || "http://localhost:5173").trim().replace(/^["']|["']$/g, "").replace(/\/$/, "");
   return `${frontendUrl}/tenant/rent/${secureId}`;
 }
 

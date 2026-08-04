@@ -1,9 +1,9 @@
-import "dotenv/config";
 import express from "express";
 import mongoose from "mongoose";
 import cors from "cors";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
+import dotenv from "dotenv";
 
 import User from "./models/User.js";
 import Plan from "./models/Plan.js";
@@ -25,6 +25,8 @@ import { backfillTenantSecureIds } from "./utils/tenantSecureId.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname  = path.dirname(__filename);
+
+dotenv.config({ path: path.join(__dirname, ".env") });
 
 const app = express();
 app.use(express.json());
