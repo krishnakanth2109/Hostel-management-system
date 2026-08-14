@@ -2,6 +2,7 @@
 import { useState, useEffect } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { API } from "../api.js";
+import appLogo from "../assets/app-logo-transparent.png";
 
 export default function RegisterPage() {
   const [form, setForm] = useState({ name: "", owner: "", ph: "", email: "", password: "", address: "" });
@@ -110,7 +111,8 @@ export default function RegisterPage() {
         .rp-blob1 { position: absolute; top: -90px; right: -70px; width: 280px; height: 280px; border-radius: 50%; background: rgba(139,92,246,0.22); filter: blur(65px); pointer-events: none; }
         .rp-blob2 { position: absolute; bottom: -70px; left: -50px; width: 240px; height: 240px; border-radius: 50%; background: rgba(16,185,129,0.13); filter: blur(50px); pointer-events: none; }
         .rp-brand { display: flex; align-items: center; gap: 10px; position: relative; z-index: 1; }
-        .rp-brand-icon { width: 36px; height: 36px; background: rgba(255,255,255,0.14); border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 17px; border: 1px solid rgba(255,255,255,0.18); }
+        .rp-brand-icon { width: 36px; height: 36px; background: #fff; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 17px; border: 1px solid rgba(255,255,255,0.18); }
+        .rp-brand-logo { width: 29px; height: 29px; object-fit: contain; display: block; }
         .rp-brand-name { font-size: 16px; font-weight: 700; letter-spacing: 0.1em; color: #fff; }
         .rp-left-mid { position: relative; z-index: 1; }
         .rp-left-mid h2 { font-size: 24px; font-weight: 700; color: #fff; line-height: 1.35; margin-bottom: 12px; }
@@ -134,7 +136,8 @@ export default function RegisterPage() {
 
         .rp-mob-brand { display: flex; align-items: center; gap: 8px; margin-bottom: 26px; }
         @media (min-width: 900px) { .rp-mob-brand { display: none; } }
-        .rp-mob-brand-icon { width: 32px; height: 32px; background: linear-gradient(135deg,#4f46e5,#818cf8); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 14px; }
+        .rp-mob-brand-icon { width: 32px; height: 32px; background: #fff; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 14px; }
+        .rp-mob-brand-logo { width: 26px; height: 26px; object-fit: contain; display: block; }
         .rp-mob-brand-name { font-size: 15px; font-weight: 700; letter-spacing: 0.08em; color: #1e1b4b; }
 
         /* Selected plan pill (mobile / top of form) */
@@ -182,7 +185,7 @@ export default function RegisterPage() {
         {/* Left panel */}
         <div className="rp-left">
           <div className="rp-blob1" /><div className="rp-blob2" />
-          <div className="rp-brand"><div className="rp-brand-icon">🏨</div><span className="rp-brand-name">Nilayam Hostel Management</span></div>
+          <div className="rp-brand"><div className="rp-brand-icon"><img src={appLogo} alt="Nilayam logo" className="rp-brand-logo" /></div><span className="rp-brand-name">Nilayam Hostel Management</span></div>
           <div className="rp-left-mid"><h2>Get started in minutes</h2><p>Set up your property profile and start managing your hostel from day one.</p></div>
 
           {chosenPlan && (
@@ -212,7 +215,7 @@ export default function RegisterPage() {
         {/* Right panel */}
         <div className="rp-right">
           <div className={`rp-card ${mounted ? "in" : ""}`}>
-            <div className="rp-mob-brand"><div className="rp-mob-brand-icon">🏨</div><span className="rp-mob-brand-name">Nilayam Hostel Management</span></div>
+            <div className="rp-mob-brand"><div className="rp-mob-brand-icon"><img src={appLogo} alt="Nilayam logo" className="rp-mob-brand-logo" /></div><span className="rp-mob-brand-name">Nilayam Hostel Management</span></div>
 
             {/* Plan pill */}
             {chosenPlan && (

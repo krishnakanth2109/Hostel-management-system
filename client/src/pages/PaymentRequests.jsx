@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Check, ExternalLink, RefreshCw, Search, X } from "lucide-react";
 import { API, authHeaders } from "../api.js";
+import { resolveOptimizedMediaUrl } from "../utils/cloudinaryDelivery.js";
 
 const BACKEND_URL = API.replace(/\/api.*$/, "");
 
@@ -17,7 +18,7 @@ const dateText = (value) => {
 
 const receiptUrl = (url) => {
   if (!url) return "";
-  return url.startsWith("http") ? url : `${BACKEND_URL}${url}`;
+  return resolveOptimizedMediaUrl(url, BACKEND_URL, { width: 1000 });
 };
 
 function StatusPill({ status }) {

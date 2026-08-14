@@ -14,6 +14,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useParams } from "react-router-dom";
 import { API } from "../api.js";
+import appLogo from "../assets/app-logo-transparent.png";
 
 const todayDateValue = () => {
   const date = new Date();
@@ -533,11 +534,13 @@ const set = k => e => {
         <div style={{ maxWidth: 540, margin: "0 auto", position: "relative", zIndex: 1 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
             <div style={{
-              width: 36, height: 36, borderRadius: 10, background: "rgba(255,255,255,0.14)",
+              width: 36, height: 36, borderRadius: 10, background: "#fff",
               border: "1px solid rgba(255,255,255,0.2)", display: "flex", alignItems: "center",
               justifyContent: "center", fontSize: 17,
-            }}>🏨</div>
-            <span style={{ color: "#fff", fontSize: 15, fontWeight: 700, letterSpacing: "0.08em" }}>Nilayam.com</span>
+            }}>
+              <img src={appLogo} alt="Nilayam logo" style={{ width: 29, height: 29, objectFit: "contain", display: "block" }} />
+            </div>
+            <span style={{ color: "#fff", fontSize: 15, fontWeight: 700, letterSpacing: "0.08em" }}>Nilayam Hostel Management</span>
           </div>
           <h1 style={{ color: "#fff", fontSize: "clamp(20px,5vw,26px)", fontWeight: 800, margin: "0 0 6px", lineHeight: 1.2 }}>
             Tenant Onboarding Form

@@ -14,6 +14,11 @@ import { SECURE_TENANT_ID_RE } from "../utils/tenantSecureId.js";
 import { logActivity } from "../utils/activityLogger.js";
 import { sendPushToOwner } from "../utils/pushService.js";
 import { buildFullPaymentEmail, buildPartialPaymentEmail } from "./rentroutes.js";
+import {
+  CLOUDINARY_IMAGE_WIDTHS,
+  withOptimizedPaymentRequestReceipt,
+  withOptimizedTenantDocuments,
+} from "../utils/cloudinaryDelivery.js";
 
 const router = express.Router();
 
@@ -260,7 +265,19 @@ router.get("/", auth, async (req, res) => {
       .populate("tenantId", "name phone email allocationInfo documents")
       .sort({ createdAt: -1 })
       .lean();
-    res.json(requests);
+    res.json(requests.map((request) => {
+      const optimized = withOptimizedPaymentRequestReceipt(request);
+      const tenant = optimized.tenantId;
+      return {
+        ...optimized,
+        tenantId: tenant && withOptimizedTenantDocuments(tenant, {
+          passportWidth: CLOUDINARY_IMAGE_WIDTHS.card,
+          passportHeight: CLOUDINARY_IMAGE_WIDTHS.card,
+          passportCrop: "fill",
+          documentWidth: CLOUDINARY_IMAGE_WIDTHS.documentThumb,
+        }),
+      };
+    }));
   } catch (err) {
     res.status(500).json({ message: "Server error." });
   }

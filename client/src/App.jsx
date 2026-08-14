@@ -1,4 +1,5 @@
-import { Routes, Route, Navigate } from "react-router-dom";
+import { useEffect } from "react";
+import { Routes, Route, Navigate, useLocation } from "react-router-dom";
 
 // Regular pages
 import LoginPage          from "./pages/LoginPage";
@@ -33,6 +34,56 @@ import MasterAutomailSettings from "./pages/master/MasterAutomailSettings.jsx";
 import PublicTenantRentDetails from "./pages/PublicTenantRentDetails.jsx";
 import PaymentRequests from "./pages/PaymentRequests.jsx";
 
+const HOME_SEO = {
+  title: "NILAYAM Hostel Management Software | Hostel & PG Management System",
+  description:
+    "NILAYAM is hostel management software for Indian hostel and PG owners to manage tenants, rooms, beds, rent payments, dues, reports, reminders and daily operations.",
+  canonical: "https://nilayamhostelmanagement.in.net/",
+  robots: "index, follow, max-image-preview:large",
+};
+
+const NOINDEX_SEO = {
+  title: "NILAYAM Hostel Management",
+  description: HOME_SEO.description,
+  canonical: HOME_SEO.canonical,
+  robots: "noindex, nofollow",
+};
+
+function setMeta(name, content, attr = "name") {
+  let tag = document.head.querySelector(`meta[${attr}="${name}"]`);
+  if (!tag) {
+    tag = document.createElement("meta");
+    tag.setAttribute(attr, name);
+    document.head.appendChild(tag);
+  }
+  tag.setAttribute("content", content);
+}
+
+function RouteSeo() {
+  const { pathname } = useLocation();
+
+  useEffect(() => {
+    const seo = pathname === "/" ? HOME_SEO : NOINDEX_SEO;
+    document.title = seo.title;
+    setMeta("description", seo.description);
+    setMeta("robots", seo.robots);
+    setMeta("og:title", seo.title, "property");
+    setMeta("og:description", seo.description, "property");
+    setMeta("twitter:title", seo.title);
+    setMeta("twitter:description", seo.description);
+
+    let canonical = document.head.querySelector('link[rel="canonical"]');
+    if (!canonical) {
+      canonical = document.createElement("link");
+      canonical.setAttribute("rel", "canonical");
+      document.head.appendChild(canonical);
+    }
+    canonical.setAttribute("href", seo.canonical);
+  }, [pathname]);
+
+  return null;
+}
+
 // ── Auth guards ───────────────────────────────────────────────────────────────
 function RequireUser({ children }) {
   const user  = JSON.parse(sessionStorage.getItem("user")  || "{}");
@@ -52,6 +103,8 @@ function RequireMaster({ children }) {
 
 export default function App() {
   return (
+    <>
+    <RouteSeo />
     <Routes>
 
 
@@ -123,5 +176,6 @@ export default function App() {
       {/* ── Fallback ───────────────────────────────────────────────────── */}
       <Route path="*" element={<Navigate to="/login" replace />} />
     </Routes>
+    </>
   );
 }

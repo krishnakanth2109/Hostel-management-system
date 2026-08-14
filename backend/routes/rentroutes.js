@@ -11,6 +11,10 @@ import Building from "../models/Building.js";
 import RentPayment from "../models/Rentpayment.js";
 import { logActivity } from "../utils/activityLogger.js";
 import { ensureTenantSecureId } from "../utils/tenantSecureId.js";
+import {
+  CLOUDINARY_IMAGE_WIDTHS,
+  withOptimizedTenantDocuments,
+} from "../utils/cloudinaryDelivery.js";
 
 const router = express.Router();
 
@@ -337,12 +341,17 @@ function sortDueResults(a, b) {
 }
 
 function toResponseItem(item) {
-  const tenant = {
+  const tenant = withOptimizedTenantDocuments({
     ...item.tenant,
     advanceAmount: item.advanceAmount,
     paidadvanceAmount: item.paidadvanceAmount,
     advancePending: item.advancePending,
-  };
+  }, {
+    passportWidth: CLOUDINARY_IMAGE_WIDTHS.card,
+    passportHeight: CLOUDINARY_IMAGE_WIDTHS.card,
+    passportCrop: "fill",
+    documentWidth: CLOUDINARY_IMAGE_WIDTHS.documentThumb,
+  });
   return {
     tenant,
     record:              item.currentRecord,
@@ -1005,7 +1014,16 @@ router.get("/all", auth, async (req, res) => {
   try {
     const tenants = await Tenant.find({ owner: req.user.id, status: "Active" }).lean();
     const results = (await buildTenantSummaries(tenants, req.user.id, FIVE_DAYS_MS))
-      .map(({ tenant, ...summary }) => ({ tenant, record: summary.currentRecord, ...summary }));
+      .map(({ tenant, ...summary }) => ({
+        tenant: withOptimizedTenantDocuments(tenant, {
+          passportWidth: CLOUDINARY_IMAGE_WIDTHS.card,
+          passportHeight: CLOUDINARY_IMAGE_WIDTHS.card,
+          passportCrop: "fill",
+          documentWidth: CLOUDINARY_IMAGE_WIDTHS.documentThumb,
+        }),
+        record: summary.currentRecord,
+        ...summary,
+      }));
     res.json(results);
   } catch (err) {
     res.status(500).json({ message: "Server error.", error: err.message });
@@ -1032,7 +1050,16 @@ router.get("/search", auth, async (req, res) => {
     }
 
     const results = (await buildTenantSummaries(tenants, req.user.id, FIVE_DAYS_MS))
-      .map(({ tenant, ...summary }) => ({ tenant, record: summary.currentRecord, ...summary }));
+      .map(({ tenant, ...summary }) => ({
+        tenant: withOptimizedTenantDocuments(tenant, {
+          passportWidth: CLOUDINARY_IMAGE_WIDTHS.card,
+          passportHeight: CLOUDINARY_IMAGE_WIDTHS.card,
+          passportCrop: "fill",
+          documentWidth: CLOUDINARY_IMAGE_WIDTHS.documentThumb,
+        }),
+        record: summary.currentRecord,
+        ...summary,
+      }));
     res.json(results);
   } catch (err) {
     res.status(500).json({ message: "Server error.", error: err.message });
@@ -1070,7 +1097,12 @@ router.get("/tenant/:tenantId", auth, async (req, res) => {
       }
     }
 
-    res.json({ tenant, buildingDetails, ...summary, history });
+    res.json({
+      tenant: withOptimizedTenantDocuments(tenant),
+      buildingDetails,
+      ...summary,
+      history,
+    });
   } catch (err) {
     res.status(500).json({ message: "Server error.", error: err.message });
   }

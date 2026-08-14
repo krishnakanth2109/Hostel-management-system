@@ -1,4 +1,17 @@
 User-agent: *
 Allow: /
+Disallow: /dashboard
+Disallow: /overview
+Disallow: /addhostel
+Disallow: /addcandidate
+Disallow: /candidates
+Disallow: /rent-management
+Disallow: /onboarding-manager
+Disallow: /activity-logs
+Disallow: /automail-settings
+Disallow: /payment-requests
+Disallow: /master/
+Disallow: /tenant-register/
+Disallow: /tenant/rent/
 
 Sitemap: https://nilayamhostelmanagement.in.net/sitemap.xml

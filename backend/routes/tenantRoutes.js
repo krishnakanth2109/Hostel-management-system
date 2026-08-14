@@ -13,6 +13,10 @@ import User from "../models/User.js";
 import jwt from "jsonwebtoken";
 import { logActivity } from "../utils/activityLogger.js";
 import { sendPushToOwner } from "../utils/pushService.js";
+import {
+  CLOUDINARY_IMAGE_WIDTHS,
+  withOptimizedTenantDocuments,
+} from "../utils/cloudinaryDelivery.js";
 
 const router = express.Router();
 
@@ -570,7 +574,10 @@ router.post("/register-via-link", upload.fields([{ name: "aadharFront", maxCount
         await logActivity(ownerId, "ONBOARD", "Tenant", `New registration: ${name} at ${loc}`);
 
         await notifyOwnerOnboarding(ownerId, tenant);
-        return res.status(201).json({ message: "Registered successfully!", tenant });
+        return res.status(201).json({
+          message: "Registered successfully!",
+          tenant: withOptimizedTenantDocuments(tenant),
+        });
       }
 
       const tenant = new Tenant({
@@ -582,7 +589,10 @@ router.post("/register-via-link", upload.fields([{ name: "aadharFront", maxCount
       await logActivity(ownerId, "ONBOARD", "Tenant", `New registration: ${name} (Waiting for room)`);
 
       await notifyOwnerOnboarding(ownerId, tenant);
-      res.status(201).json({ message: "Registered successfully!", tenant });
+      res.status(201).json({
+        message: "Registered successfully!",
+        tenant: withOptimizedTenantDocuments(tenant),
+      });
     } catch (err) { res.status(500).json({ message: "Server error.", error: err.message }); }
   }
 );
@@ -596,7 +606,12 @@ router.get("/notifications", auth, async (req, res) => {
     const tenants = await Tenant.find({ owner: req.user.id, source: "onboarding-link" })
       .select("name phone email joiningDate rentAmount allocationInfo isVerified createdAt documents")
       .sort({ createdAt: -1 }).limit(30).lean();
-    res.json(tenants);
+    res.json(tenants.map((tenant) => withOptimizedTenantDocuments(tenant, {
+      passportWidth: CLOUDINARY_IMAGE_WIDTHS.avatar,
+      passportHeight: CLOUDINARY_IMAGE_WIDTHS.avatar,
+      passportCrop: "fill",
+      documentWidth: CLOUDINARY_IMAGE_WIDTHS.documentThumb,
+    })));
   } catch (err) { res.status(500).json({ message: "Server error." }); }
 });
 
@@ -648,13 +663,19 @@ router.post("/", auth, upload.fields([{ name: "aadharFront" }, { name: "aadharBa
 
         const loc = `${building.buildingName} ➔ Floor ${floor.floorNumber} ➔ Room ${room.roomNumber} ➔ Bed ${bed.bedNumber}`;
         await logActivity(req.user.id, "CREATE", "Tenant", `Added Tenant: ${name} at ${loc}`);
-        return res.status(201).json({ message: "Tenant added.", tenant });
+        return res.status(201).json({
+          message: "Tenant added.",
+          tenant: withOptimizedTenantDocuments(tenant),
+        });
       }
 
       const tenant = new Tenant({ owner: req.user.id, name, phone, email, fatherName, fatherPhone, permanentAddress, joiningDate, rentAmount: Number(rentAmount), advanceAmount: advance, paidadvanceAmount: 0, documents });
       await tenant.save();
       await logActivity(req.user.id, "CREATE", "Tenant", `Added Tenant: ${name} (No Room Assigned)`);
-      res.status(201).json({ message: "Tenant added successfully.", tenant });
+      res.status(201).json({
+        message: "Tenant added successfully.",
+        tenant: withOptimizedTenantDocuments(tenant),
+      });
     } catch (err) { res.status(500).json({ message: "Server error.", error: err.message }); }
   }
 );
@@ -664,14 +685,19 @@ router.get("/", auth, async (req, res) => {
     const filter = { owner: req.user.id };
     if (req.query.source) filter.source = req.query.source;
     const tenants = await Tenant.find(filter).sort({ createdAt: -1 }).lean();
-    res.json(tenants);
+    res.json(tenants.map((tenant) => withOptimizedTenantDocuments(tenant, {
+      passportWidth: CLOUDINARY_IMAGE_WIDTHS.card,
+      passportHeight: CLOUDINARY_IMAGE_WIDTHS.card,
+      passportCrop: "fill",
+      documentWidth: CLOUDINARY_IMAGE_WIDTHS.documentThumb,
+    })));
   } catch (err) { res.status(500).json({ message: "Server error." }); }
 });
 
 router.get("/:id", auth, async (req, res) => {
   try {
     const tenant = await Tenant.findOne({ _id: req.params.id, owner: req.user.id }).lean();
-    res.json(tenant);
+    res.json(withOptimizedTenantDocuments(tenant));
   } catch (err) { res.status(500).json({ message: "Server error." }); }
 });
 
@@ -726,7 +752,10 @@ router.put("/:id", auth, upload.fields([{ name: "aadharFront" }, { name: "aadhar
       }
     }
 
-    res.json({ message: "Tenant updated.", tenant: updatedTenant });
+    res.json({
+      message: "Tenant updated.",
+      tenant: withOptimizedTenantDocuments(updatedTenant),
+    });
   } catch (err) { res.status(500).json({ message: "Server error.", error: err.message }); }
 });
 
@@ -796,7 +825,10 @@ router.put("/:id/reallocate", auth, async (req, res) => {
     const newLoc = `${newB.buildingName} ➔ Floor ${f.floorNumber} ➔ Room ${r.roomNumber} ➔ Bed ${b.bedNumber}`;
     await logActivity(req.user.id, "REALLOCATE", "Tenant", `Moved ${tenant.name} from ${oldLoc} to ${newLoc}`);
 
-    res.json({ message: "Tenant reallocated.", tenant });
+    res.json({
+      message: "Tenant reallocated.",
+      tenant: withOptimizedTenantDocuments(tenant),
+    });
   } catch (err) { res.status(500).json({ message: "Server error.", error: err.message }); }
 });
 

@@ -6,6 +6,10 @@ import RentPayment from "../models/Rentpayment.js";
 import AutoMailConfig from "../models/Automailconfig.js";
 import ActivityLog from "../models/ActivityLog.js";
 import jwt from "jsonwebtoken";
+import {
+  CLOUDINARY_IMAGE_WIDTHS,
+  withOptimizedTenantDocuments,
+} from "../utils/cloudinaryDelivery.js";
 
 const router = express.Router();
 
@@ -239,7 +243,15 @@ router.get("/users/:userId", masterAuth, async (req, res) => {
     const tenantsWithPayment = tenants.map((t) => {
         const rec = rentDocsByTenantId.get(t._id.toString());
         const currentPayment = rec?.monthlyPayments?.find((payment) => payment.monthYear === monthYr) || null;
-        return { ...t, currentPayment: currentPayment ? { ...currentPayment, tenantId: t._id } : null };
+        return {
+          ...withOptimizedTenantDocuments(t, {
+            passportWidth: CLOUDINARY_IMAGE_WIDTHS.card,
+            passportHeight: CLOUDINARY_IMAGE_WIDTHS.card,
+            passportCrop: "fill",
+            documentWidth: CLOUDINARY_IMAGE_WIDTHS.documentThumb,
+          }),
+          currentPayment: currentPayment ? { ...currentPayment, tenantId: t._id } : null,
+        };
       });
 
     res.json({

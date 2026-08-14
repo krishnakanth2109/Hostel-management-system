@@ -3,6 +3,7 @@ import Tenant from "../models/Tenant.js";
 import RentPayment from "../models/Rentpayment.js";
 import PaymentRequest from "../models/PaymentRequest.js";
 import { SECURE_TENANT_ID_RE } from "../utils/tenantSecureId.js";
+import { optimizeCloudinaryImageUrl } from "../utils/cloudinaryDelivery.js";
 
 const router = express.Router();
 
@@ -150,7 +151,10 @@ router.get("/tenant/:secureId", async (req, res) => {
     res.json({
       tenant: {
         name: tenant.name,
-        profile: tenant.documents?.passportPhoto || null,
+        profile: optimizeCloudinaryImageUrl(tenant.documents?.passportPhoto || null, {
+          width: 640,
+        }),
+        originalProfile: tenant.documents?.passportPhoto || null,
         phone: tenant.phone,
         email: tenant.email || "",
         fatherName: tenant.fatherName || "",

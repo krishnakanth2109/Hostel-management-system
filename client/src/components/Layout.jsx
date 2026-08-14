@@ -27,6 +27,7 @@ import {
   // UserPlus ,
   
 } from "lucide-react";
+import { resolveOptimizedMediaUrl } from "../utils/cloudinaryDelivery.js";
 
 const NAV = [
   { to: "/dashboard",          label: "Dashboard",           icon: <LayoutDashboard size={20} /> },
@@ -51,8 +52,7 @@ const LAST_SEEN_KEY = "hosteliq_notif_last_seen";
 
 const docUrl = (src) => {
   if (!src) return null;
-  if (src.startsWith("http")) return src;
-  return `${BACKEND_URL}${src}`;
+  return resolveOptimizedMediaUrl(src, BACKEND_URL, { width: 160, height: 160, crop: "fill" });
 };
 
 function timeAgo(dateStr) {

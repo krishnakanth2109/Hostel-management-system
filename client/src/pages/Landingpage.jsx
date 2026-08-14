@@ -18,6 +18,7 @@ const NAV = [
   { label: "Features", href: "#features" },
   { label: "Why Nilayam", href: "#why" },
   { label: "Pricing", href: "#pricing" },
+  { label: "FAQ", href: "#faq" },
   { label: "Contact", href: "#contact" },
 ];
 
@@ -85,12 +86,40 @@ const EXPLORER = [
   },
 ];
 
+const FAQS = [
+  [
+    "What is NILAYAM?",
+    "NILAYAM is hostel management software for hostel and PG owners to manage tenants, rooms, beds, rent, dues, reports and reminders.",
+  ],
+  [
+    "Who can use NILAYAM?",
+    "Hostel owners, PG owners, property managers and accommodation businesses can use NILAYAM to organize daily operations.",
+  ],
+  [
+    "Does NILAYAM manage rent payments?",
+    "Yes. NILAYAM helps track paid, pending and overdue rent payments with payment request approval and rent history.",
+  ],
+  [
+    "Can I manage rooms and beds?",
+    "Yes. NILAYAM supports buildings, floors, rooms and bed allocation so owners can quickly see occupancy and availability.",
+  ],
+  [
+    "Is NILAYAM available on mobile?",
+    "Yes. NILAYAM offers web access and an Android app so hostel owners can manage their hostel from anywhere.",
+  ],
+  [
+    "Is NILAYAM useful for PG management?",
+    "Yes. NILAYAM works as PG management software for tenant records, room allocation, rent tracking and reminders.",
+  ],
+];
+
 export default function NilayamSite() {
   const [scrolled, setScrolled] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [chooseMuted, setChooseMuted] = useState(true);
   const [showWhatsAppPrompt, setShowWhatsAppPrompt] = useState(false);
   const [appSlide, setAppSlide] = useState(0);
+  const [openFaq, setOpenFaq] = useState(0);
   const [plans, setPlans] = useState([]);
   const [plansLoading, setPlansLoading] = useState(true);
   const navigate = useNavigate();
@@ -132,12 +161,9 @@ export default function NilayamSite() {
   }, [plansLoading, plans]);
 
   useEffect(() => {
-    if (localStorage.getItem("nilayamvisit") === "true") return;
-
     setShowWhatsAppPrompt(true);
     const timer = window.setTimeout(() => {
       setShowWhatsAppPrompt(false);
-      localStorage.setItem("nilayamvisit", "true");
     }, 5000);
 
     return () => window.clearTimeout(timer);
@@ -226,14 +252,14 @@ export default function NilayamSite() {
         <div className="container hero-grid">
           <div className="hero-copy">
             <h1 className="h1">
-              Manage Your Hostel <span className="grad">Smarter.</span><br />
-              Manage Your Business <span className="grad-gold">Better.</span>
+              NILAYAM Hostel Management <span className="grad">Software.</span><br />
+              Manage Your Hostel <span className="grad-gold">Better.</span>
             </h1>
-            <p className="sub">Smart Hostel Management, Made Simple.</p>
+            <p className="sub">Hostel and PG Management System, Made Simple.</p>
             <p className="desc">
-              NILAYAM is an all-in-one hostel management platform designed to simplify tenant management,
-              room and bed allocation, rent collection, payment tracking, pending dues, reports,
-              notifications and everyday hostel operations.
+              NILAYAM is an all-in-one hostel management software for Indian hostel and PG owners.
+              Manage tenant records, room and bed allocation, rent collection, payment tracking,
+              pending dues, reports, reminders and everyday hostel operations from one place.
             </p>
             <div className="cta-row">
               <button className="btn btn-primary lg" onClick={() => scrollTo("#pricing")}>Get Started</button>
@@ -255,13 +281,13 @@ export default function NilayamSite() {
                   <strong>Complete Hostel Management.</strong>
                 </div>
                 <p>
-                  NILAYAM is a modern hostel management platform built to simplify the everyday operations
-                  of hostel owners and managers.
+                  NILAYAM is a modern hostel management software platform built to simplify the everyday
+                  operations of hostel owners, PG owners and managers.
                 </p>
                 <p>
                   From managing buildings, floors, rooms and beds to handling tenants, rent, payments,
                   pending dues, reports and notifications — NILAYAM brings everything together in one
-                  simple, organized platform.
+                  simple, organized hostel software platform.
                 </p>
                 <p>
                   Our goal is to reduce manual work, improve transparency, save valuable time and help
@@ -282,7 +308,7 @@ export default function NilayamSite() {
           <SectionHead
             kicker="Features"
             title={<>Everything You Need. <span className="grad">All in One App.</span></>}
-            sub="NILAYAM brings the most important hostel management tasks into one organized platform. Spend less time on paperwork and more time growing your hostel business."
+            sub="NILAYAM brings the most important hostel management and PG management tasks into one organized platform. Spend less time on paperwork and more time growing your hostel business."
           />
           <div className="features-grid">
             {FEATURES.map((f, i) => (
@@ -478,6 +504,31 @@ export default function NilayamSite() {
         </div>
       </section>
 
+      <section id="faq" className="section">
+        <div className="container">
+          <SectionHead kicker="FAQ" title="NILAYAM Hostel Software Questions" />
+          <div className="faq-panel reveal-up">
+            {FAQS.map(([q, a], i) => (
+              <div key={q} className={`faq-item ${openFaq === i ? "faq-item--open" : ""}`}>
+                <button
+                  className="faq-question"
+                  type="button"
+                  aria-expanded={openFaq === i}
+                  aria-controls={`faq-answer-${i}`}
+                  onClick={() => setOpenFaq((current) => (current === i ? -1 : i))}
+                >
+                  <span>{q}</span>
+                  <span className="faq-plus" aria-hidden="true" />
+                </button>
+                <div id={`faq-answer-${i}`} className="faq-answer" role="region">
+                  <p>{a}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
       <section className="final-cta">
         <div className="container final-inner">
           <span className="glow" />
@@ -532,7 +583,7 @@ export default function NilayamSite() {
           <div>
             <h5>Explore</h5>
             <ul>
-              {NAV.slice(0, 6).map((n) => (
+              {NAV.slice(0, 7).map((n) => (
                 <li key={n.href}>
                   <a href={n.href} onClick={(e) => { e.preventDefault(); scrollTo(n.href); }}>{n.label}</a>
                 </li>
@@ -929,6 +980,23 @@ const CSS = `
 .learn{font-size:13px;font-weight:700;color:var(--blue);opacity:0;transform:translateX(-6px);transition:all .3s}
 .feature-card:hover .learn{opacity:1;transform:translateX(0)}
 
+.faq-panel{max-width:880px;margin:0 auto;background:#fff;border:1px solid rgba(15,42,90,.08);border-radius:18px;box-shadow:0 28px 70px -44px rgba(15,42,90,.32);overflow:hidden}
+.faq-item{border-bottom:1px solid rgba(15,42,90,.08);transition:background .25s ease}
+.faq-item:last-child{border-bottom:0}
+.faq-item--open{background:linear-gradient(180deg,#fff,rgba(244,247,252,.64))}
+.faq-question{width:100%;min-height:68px;display:flex;align-items:center;justify-content:space-between;gap:20px;padding:0 28px;background:transparent;border:0;color:var(--ink);font-family:inherit;font-size:15px;font-weight:800;text-align:left;cursor:pointer}
+.faq-question:hover{color:var(--blue)}
+.faq-question:focus-visible{outline:3px solid rgba(59,123,255,.24);outline-offset:-3px}
+.faq-plus{position:relative;width:18px;height:18px;flex:0 0 18px;transition:transform .28s ease}
+.faq-plus::before,.faq-plus::after{content:"";position:absolute;left:50%;top:50%;width:12px;height:2px;background:currentColor;border-radius:999px;transform:translate(-50%,-50%);transition:transform .28s ease,opacity .2s ease}
+.faq-plus::after{transform:translate(-50%,-50%) rotate(90deg)}
+.faq-item--open .faq-plus{transform:rotate(180deg)}
+.faq-item--open .faq-plus::after{opacity:0;transform:translate(-50%,-50%) rotate(0deg)}
+.faq-answer{display:grid;grid-template-rows:0fr;transition:grid-template-rows .36s cubic-bezier(.22,1,.36,1),opacity .28s ease;opacity:0}
+.faq-answer p{overflow:hidden;margin:0;padding:0 28px;color:var(--muted);font-size:15px;line-height:1.7}
+.faq-item--open .faq-answer{grid-template-rows:1fr;opacity:1}
+.faq-item--open .faq-answer p{padding-bottom:22px}
+
 .explorer{display:grid;grid-template-columns:280px 1fr;gap:0;overflow:hidden;padding:0}
 .explorer-nav{padding:20px;border-right:1px solid var(--line);display:flex;flex-direction:column;gap:6px;background:rgba(255,255,255,.5)}
 .ex-item{display:flex;align-items:center;gap:12px;padding:14px 16px;border-radius:12px;background:transparent;border:0;cursor:pointer;text-align:left;font-family:inherit;font-size:14px;font-weight:600;color:var(--muted);transition:all .25s}
@@ -1097,6 +1165,10 @@ const CSS = `
   .whatsapp-icon svg{width:34px;height:34px}
   .whatsapp-prompt{padding:11px 18px}
   .section{padding:52px 0}
+  .faq-panel{border-radius:14px}
+  .faq-question{min-height:62px;padding:0 18px;font-size:14px}
+  .faq-answer p{padding:0 18px;font-size:14px}
+  .faq-item--open .faq-answer p{padding-bottom:18px}
   .hero{padding:106px 0 60px}
   .about-panel{padding:20px;border-radius:18px}
   .p-lg{padding:24px}

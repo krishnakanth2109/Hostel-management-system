@@ -6,6 +6,7 @@
 
 import { useState, useEffect } from "react";
 import { API, authHeaders } from "../api.js";
+import { resolveOptimizedMediaUrl } from "../utils/cloudinaryDelivery.js";
 
 // Backend base URL (e.g. "http://localhost:5000") — strips any trailing /api path
 // so that /uploads/tenant-docs/xxx.jpg resolves correctly.
@@ -16,8 +17,7 @@ const BACKEND_URL = API.replace(/\/api.*$/, "");
 //   - Relative disk path "/uploads/..." → prepend backend origin
 const docUrl = (src) => {
   if (!src) return null;
-  if (src.startsWith("http")) return src;
-  return `${BACKEND_URL}${src}`;
+  return resolveOptimizedMediaUrl(src, BACKEND_URL, { width: 1000 });
 };
 
 /* ─── tiny style helpers ────────────────────────────────────────── */
@@ -66,7 +66,7 @@ function DocumentModal({ isOpen, onClose, documents, tenantName }) {
   ].filter(doc => doc.src);
 
   const openInNewTab = (url) => {
-    window.open(url, '_blank', 'noopener,noreferrer');
+    window.open(docUrl(url), '_blank', 'noopener,noreferrer');
   };
 
   return (

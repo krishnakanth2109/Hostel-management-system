@@ -2,6 +2,7 @@
 import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { API } from "../api.js";
+import appLogo from "../assets/app-logo-transparent.png";
 
 export default function LoginPage() {
   const [email,    setEmail]    = useState("");
@@ -142,7 +143,8 @@ export default function LoginPage() {
         .lp-left-blob1 { position:absolute; top:-100px; right:-80px; width:300px; height:300px; border-radius:50%; background:rgba(139,92,246,0.25); filter:blur(70px); pointer-events:none; }
         .lp-left-blob2 { position:absolute; bottom:-80px; left:-60px; width:260px; height:260px; border-radius:50%; background:rgba(16,185,129,0.15); filter:blur(55px); pointer-events:none; }
         .lp-brand { display:flex; align-items:center; gap:10px; position:relative; z-index:1; }
-        .lp-brand-icon { width:38px; height:38px; background:rgba(255,255,255,0.15); border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:18px; border:1px solid rgba(255,255,255,0.2); }
+        .lp-brand-icon { width:38px; height:38px; background:#fff; border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:18px; border:1px solid rgba(255,255,255,0.2); }
+        .lp-brand-logo { width:30px; height:30px; object-fit:contain; display:block; }
         .lp-brand-name { font-size:16px; font-weight:700; letter-spacing:0.1em; color:#fff; }
         .lp-left-mid { position:relative; z-index:1; }
         .lp-left-mid h2 { font-size:26px; font-weight:700; color:#fff; line-height:1.35; margin-bottom:12px; }
@@ -158,7 +160,8 @@ export default function LoginPage() {
 
         .lp-mob-brand { display:flex; align-items:center; gap:8px; margin-bottom:28px; }
         @media (min-width:860px) { .lp-mob-brand { display:none; } }
-        .lp-mob-brand-icon { width:32px; height:32px; background:linear-gradient(135deg,#4f46e5,#818cf8); border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:14px; }
+        .lp-mob-brand-icon { width:32px; height:32px; background:#fff; border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:14px; }
+        .lp-mob-brand-logo { width:26px; height:26px; object-fit:contain; display:block; }
         .lp-mob-brand-name { font-size:15px; font-weight:700; letter-spacing:0.08em; color:#1e1b4b; }
 
         .lp-hd { margin-bottom:30px; }
@@ -444,7 +447,7 @@ export default function LoginPage() {
       <div className="lp-root">
         <div className="lp-left">
           <div className="lp-left-blob1" /><div className="lp-left-blob2" />
-          <div className="lp-brand"><div className="lp-brand-icon">🏨</div><span className="lp-brand-name">Nilayam Hostel Management</span></div>
+          <div className="lp-brand"><div className="lp-brand-icon"><img src={appLogo} alt="Nilayam logo" className="lp-brand-logo" /></div><span className="lp-brand-name">Nilayam Hostel Management</span></div>
           <div className="lp-left-mid"><h2>Manage your hostel smarter</h2><p>Everything you need to run your property — rooms, tenants, payments — in one place.</p></div>
           <div className="lp-features">
             {["Room & bed management","Tenant onboarding & KYC","Rent tracking & receipts","Multi-property support"].map(f => (
@@ -455,7 +458,7 @@ export default function LoginPage() {
 
         <div className="lp-right">
           <div className={`lp-card ${mounted ? "in" : ""}`}>
-            <div className="lp-mob-brand"><div className="lp-mob-brand-icon">🏨</div><span className="lp-mob-brand-name">Nilayam Hostel Management</span></div>
+            <div className="lp-mob-brand"><div className="lp-mob-brand-icon"><img src={appLogo} alt="Nilayam logo" className="lp-mob-brand-logo" /></div><span className="lp-mob-brand-name">Nilayam Hostel Management</span></div>
             <div className="lp-hd"><h1>Welcome back 👋</h1><p>Sign in to your account to continue</p></div>
 
             <form className="lp-form" onSubmit={handleLogin}>

@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useLocation } from "react-router-dom";
+import { optimizeCloudinaryImageUrl } from "../utils/cloudinaryDelivery.js";
 
 const API = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
 
@@ -66,6 +67,7 @@ const AdvanceBadge = ({ expected = 0, paid = 0, size = "md" }) => {
 };
 
 function ProfileImagePopup({ imageUrl, name, onClose }) {
+  const optimizedImageUrl = optimizeCloudinaryImageUrl(imageUrl, { width: 640 });
   return (
     <div
       className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/85 backdrop-blur-md"
@@ -77,11 +79,11 @@ function ProfileImagePopup({ imageUrl, name, onClose }) {
           className="absolute -top-3 -right-3 w-8 h-8 flex items-center justify-center rounded-full bg-white/20 hover:bg-white/40 text-white text-lg font-bold transition-colors z-10 border border-white/30"
         >✕</button>
         <div className="w-64 h-64 sm:w-80 sm:h-80 rounded-full overflow-hidden border-4 border-white/30 shadow-2xl">
-          <img src={imageUrl} alt={name} className="w-full h-full object-cover" />
+          <img src={optimizedImageUrl} alt={name} className="w-full h-full object-cover" />
         </div>
         {name && <p className="text-white font-bold text-lg tracking-wide drop-shadow-lg">{name}</p>}
         <button
-          onClick={() => window.open(imageUrl, "_blank")}
+          onClick={() => window.open(optimizedImageUrl, "_blank")}
           className="text-white/70 hover:text-white text-xs font-semibold underline underline-offset-2 transition-colors"
         >🔗 Open full size</button>
       </div>
@@ -91,6 +93,7 @@ function ProfileImagePopup({ imageUrl, name, onClose }) {
 
 // ─── Document Viewer ──────────────────────────────────────────────────────────
 function DocumentViewer({ imageUrl, onClose }) {
+  const optimizedImageUrl = optimizeCloudinaryImageUrl(imageUrl, { width: 1000 });
   return (
     <div
       className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md"
@@ -99,10 +102,10 @@ function DocumentViewer({ imageUrl, onClose }) {
       <div className="relative max-w-4xl max-h-[90vh] w-full" onClick={(e) => e.stopPropagation()}>
         <button onClick={onClose} className="absolute -top-12 right-0 text-white hover:text-gray-300 text-2xl">✕</button>
         <button
-          onClick={() => window.open(imageUrl, "_blank")}
+          onClick={() => window.open(optimizedImageUrl, "_blank")}
           className="absolute -top-12 right-12 text-white hover:text-gray-300 text-sm bg-white/20 px-3 py-1 rounded-lg"
         >🔗 Open in new tab</button>
-        <img src={imageUrl} alt="Document" className="w-full h-full object-contain rounded-lg" />
+        <img src={optimizedImageUrl} alt="Document" className="w-full h-full object-contain rounded-lg" />
       </div>
     </div>
   );
