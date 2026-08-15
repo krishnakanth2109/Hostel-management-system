@@ -821,8 +821,9 @@ const CSS = `
 .hamburger--open span:nth-child(2){opacity:0;transform:scaleX(0)}
 .hamburger--open span:nth-child(3){top:18px;transform:rotate(-45deg)}
 .mobile-menu{display:flex;flex-direction:column;gap:12px;max-height:0;opacity:0;overflow:hidden;padding:0 24px;background:rgba(255,255,255,.95);backdrop-filter:blur(20px);border-bottom:0 solid transparent;transform:translateY(-8px);transition:max-height .32s ease,opacity .24s ease,transform .32s ease,padding .32s ease,border-color .32s ease}
-.mobile-menu--open{max-height:420px;opacity:1;padding:18px 24px 20px;border-bottom-width:1px;border-bottom-color:var(--line);transform:translateY(0)}
+.mobile-menu--open{max-height:calc(100dvh - 78px);opacity:1;padding:18px 24px 20px;border-bottom-width:1px;border-bottom-color:var(--line);transform:translateY(0);overflow-y:auto}
 .mobile-menu a{color:var(--ink);font-weight:500;padding:8px 0;border-bottom:1px solid var(--line)}
+.mobile-menu .btn{width:100%;min-height:48px}
 
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;font-weight:600;font-size:14px;padding:10px 18px;border-radius:12px;border:0;cursor:pointer;transition:all .25s cubic-bezier(.4,0,.2,1);white-space:nowrap;font-family:inherit}
 .btn.lg{padding:14px 26px;font-size:15px;border-radius:14px}

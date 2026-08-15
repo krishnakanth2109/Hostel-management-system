@@ -13,6 +13,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useParams } from "react-router-dom";
+import { CalendarDays, Info } from "lucide-react";
 import { API } from "../api.js";
 import appLogo from "../assets/app-logo-transparent.png";
 
@@ -52,14 +53,14 @@ function Field({ label, children }) {
   );
 }
 
-function FocusInput({ type = "text", placeholder, value, onChange, required, min, ...props }) {
+function FocusInput({ type = "text", placeholder, value, onChange, required, min, style, ...props }) {
   const [focused, setFocused] = useState(false);
   return (
     <input
       type={type} placeholder={placeholder} value={value} onChange={onChange}
       required={required} min={min}
       {...props}
-      style={{ ...inp, ...(focused ? inpFocus : {}) }}
+      style={{ ...inp, ...style, ...(focused ? inpFocus : {}) }}
       onFocus={() => setFocused(true)}
       onBlur={() => setFocused(false)}
     />
@@ -136,7 +137,7 @@ function DocCard({ label, icon, preview, onPick, fileRef }) {
           <span style={{ fontSize: 10, color: "#94a3b8" }}>Click to upload</span>
         </>
       )}
-      <input ref={fileRef} type="file" accept="image/*,application/pdf"
+      <input ref={fileRef} type="file" accept="image/*"
         onChange={onPick} style={{ display: "none" }} />
     </div>
   );
@@ -244,6 +245,7 @@ export default function TenantOnboardingForm() {
   const handleFile = (e, type) => {
     const file = e.target.files[0];
     if (!file) return;
+    if (!file.type.startsWith("image/")) { setError("Please upload photos or screenshots only"); return; }
     if (file.size > 5 * 1024 * 1024) { setError("File must be under 5 MB"); return; }
     const reader = new FileReader();
     reader.onloadend = () => {
@@ -562,7 +564,7 @@ const set = k => e => {
           <StepBar step={step} />
 
           {/* ── Error banner ── */}
-          {error && (
+          {error && !(step === 1 && error === "Please fill all required fields correctly") && (
             <div style={{
               padding: "10px 14px", background: "#fef2f2", border: "1px solid #fecaca",
               borderRadius: 8, fontSize: 13, color: "#dc2626", marginBottom: 20,
@@ -729,12 +731,15 @@ const set = k => e => {
               <SectionLabel>Tenancy Details</SectionLabel>
 
               <TwoCol>
-                <Field label="Joining Date *">
-                  <FocusInput type="date" value={form.joiningDate} onChange={set("joiningDate")} max={todayDateValue()} />
-                  {fieldErrors.joiningDate && (
-                    <span style={{ color: "red", fontSize: 11 }}>{fieldErrors.joiningDate}</span>
-                  )}
-                </Field>
+                <DuesStartDateCard error={fieldErrors.joiningDate}>
+                  <FocusInput
+                    type="date"
+                    value={form.joiningDate}
+                    onChange={set("joiningDate")}
+                    max={todayDateValue()}
+                    style={duesDateInputStyle}
+                  />
+                </DuesStartDateCard>
                 <Field label="Monthly Rent (₹) *">
                   <FocusInput type="number" placeholder="e.g. 5000" value={form.rentAmount} onChange={set("rentAmount")} min="1" />
                 </Field>
@@ -759,6 +764,12 @@ const set = k => e => {
                 </div>
               )}
 
+              {error === "Please fill all required fields correctly" && (
+                <div style={inlineValidationErrorStyle}>
+                  ⚠️ Please fill all required fields correctly
+                </div>
+              )}
+
               <PrimaryBtn
                 onClick={() => {
                   if (!emailVerified) {
@@ -779,7 +790,7 @@ const set = k => e => {
             <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
               <SectionLabel>Upload Documents</SectionLabel>
               <p style={{ fontSize: 13, color: "#64748b", margin: "-8px 0 0", lineHeight: 1.65 }}>
-                Upload clear photos of your documents (JPG, PNG or PDF, max 5 MB each). All three are required.
+                Please upload clear photos or screenshots only (JPG, PNG or WEBP, max 5 MB each).All three are required.
               </p>
 
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 14 }}>
@@ -942,6 +953,34 @@ function SectionLabel({ children }) {
   );
 }
 
+function DuesStartDateCard({ children, error }) {
+  return (
+      <div style={duesCardStyle}>
+      <div style={duesHeaderStyle}>
+        <CalendarDays size={18} strokeWidth={2.4} />
+        <span>DUES START DATE</span>
+      </div>
+
+      <div style={duesDescriptionStyle}>
+        <Info size={20} strokeWidth={2.3} style={{ flex: "0 0 auto", color: "#4f46e5", marginTop: 1 }} />
+        <p style={{ margin: 0 }}>
+      Enter the date from which you have not paid rent. Your pending rent will be calculated from this date onward.
+      <br />
+      If you have already paid the rent for a month, select that month’s date and ask the owner to update the rent status as “Paid.”
+        </p>
+      </div>
+
+      <label style={duesDateFieldStyle}>
+        <span style={duesDateLabelStyle}>Last Unpaid Date *</span>
+        <div style={duesDateInputWrapStyle}>{children}</div>
+      </label>
+
+      {error && <span style={{ color: "#dc2626", fontSize: 11, fontWeight: 600 }}>{error}</span>}
+
+    </div>
+  );
+}
+
 function TwoCol({ children }) {
   return (
     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))", gap: 14 }}>
@@ -1038,3 +1077,78 @@ const chevron = {
   position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)",
   pointerEvents: "none", color: "#94a3b8", fontSize: 14,
 };
+
+const duesCardStyle = {
+  gridColumn: "1 / -1",
+  display: "flex",
+  flexDirection: "column",
+  gap: 12,
+  padding: "16px 14px",
+  border: "1.5px solid #e2e8f0",
+  borderRadius: 12,
+  background: "#fff",
+  boxSizing: "border-box",
+};
+
+const duesHeaderStyle = {
+  alignSelf: "flex-start",
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 8,
+  padding: "8px 12px",
+  borderRadius: 10,
+  color: "#4f46e5",
+  background: "linear-gradient(135deg,rgba(79,70,229,0.12),rgba(99,102,241,0.06))",
+  fontSize: 16,
+  fontWeight: 800,
+  letterSpacing: "0.02em",
+};
+
+const duesDescriptionStyle = {
+  display: "flex",
+  alignItems: "flex-start",
+  gap: 10,
+  color: "#334155",
+  fontSize: 13.5,
+  lineHeight: 1.55,
+};
+
+const duesDateFieldStyle = {
+  display: "flex",
+  flexDirection: "column",
+  gap: 6,
+};
+
+const duesDateLabelStyle = {
+  fontSize: 12,
+  fontWeight: 700,
+  color: "#64748b",
+  letterSpacing: "0.04em",
+  textTransform: "uppercase",
+};
+
+const duesDateInputWrapStyle = {
+  position: "relative",
+};
+
+const duesDateInputStyle = {
+  minHeight: 48,
+  borderRadius: 10,
+  borderColor: "#c7d2fe",
+  fontSize: 15,
+  fontWeight: 700,
+  color: "#0f172a",
+  padding: "11px 14px",
+};
+
+const inlineValidationErrorStyle = {
+  padding: "9px 12px",
+  background: "#fef2f2",
+  border: "1px solid #fecaca",
+  borderRadius: 8,
+  color: "#dc2626",
+  fontSize: 12.5,
+  fontWeight: 650,
+  lineHeight: 1.4,
+};
+

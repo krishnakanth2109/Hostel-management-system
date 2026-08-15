@@ -14,6 +14,20 @@ export default function LoginPage() {
   const [focused,  setFocused]  = useState("");
   const [showPass, setShowPass] = useState(false);
   const [mounted,  setMounted]  = useState(false);
+  const [toast,    setToast]    = useState("");
+
+  const [forgotOpen, setForgotOpen] = useState(false);
+  const [forgotStep, setForgotStep] = useState("email");
+  const [forgotEmail, setForgotEmail] = useState("");
+  const [forgotOtp, setForgotOtp] = useState("");
+  const [forgotPassword, setForgotPassword] = useState("");
+  const [forgotConfirm, setForgotConfirm] = useState("");
+  const [forgotToken, setForgotToken] = useState("");
+  const [forgotLoading, setForgotLoading] = useState(false);
+  const [forgotError, setForgotError] = useState("");
+  const [forgotInfo, setForgotInfo] = useState("");
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [showForgotConfirm, setShowForgotConfirm] = useState(false);
 
   // Plan expired flow
   const [planExpired,      setPlanExpired]      = useState(false);
@@ -128,6 +142,101 @@ export default function LoginPage() {
     }
   };
 
+  const openForgot = () => {
+    setForgotOpen(true);
+    setForgotStep("email");
+    setForgotEmail(email.trim().toLowerCase());
+    setForgotOtp("");
+    setForgotPassword("");
+    setForgotConfirm("");
+    setForgotToken("");
+    setForgotError("");
+    setForgotInfo("");
+    setShowForgotPassword(false);
+    setShowForgotConfirm(false);
+  };
+
+  const closeForgot = () => {
+    setForgotOpen(false);
+    setForgotLoading(false);
+  };
+
+  const showSuccessToast = (msg) => {
+    setToast(msg);
+    window.setTimeout(() => setToast(""), 2800);
+  };
+
+  const sendForgotOtp = async () => {
+    const cleanEmail = forgotEmail.trim().toLowerCase();
+    if (!cleanEmail) return setForgotError("Please enter your registered email.");
+    setForgotLoading(true);
+    setForgotError("");
+    setForgotInfo("");
+    try {
+      const res = await fetch(`${API}/forgot-password/send-otp`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: cleanEmail }),
+      });
+      const data = await res.json();
+      if (!res.ok) return setForgotError(data.message || "Unable to send OTP.");
+      setForgotEmail(cleanEmail);
+      setForgotStep("otp");
+      setForgotInfo("OTP sent to your registered email.");
+    } catch {
+      setForgotError("Cannot connect to server. Please try again.");
+    } finally {
+      setForgotLoading(false);
+    }
+  };
+
+  const verifyForgotOtp = async () => {
+    if (!forgotOtp.trim()) return setForgotError("Please enter the OTP.");
+    setForgotLoading(true);
+    setForgotError("");
+    setForgotInfo("");
+    try {
+      const res = await fetch(`${API}/forgot-password/verify-otp`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: forgotEmail, otp: forgotOtp }),
+      });
+      const data = await res.json();
+      if (!res.ok) return setForgotError(data.message || "OTP verification failed.");
+      setForgotToken(data.resetToken || "");
+      setForgotStep("password");
+      setForgotInfo("Email verified. Set your new password.");
+    } catch {
+      setForgotError("Cannot connect to server. Please try again.");
+    } finally {
+      setForgotLoading(false);
+    }
+  };
+
+  const updateForgotPassword = async () => {
+    if (forgotPassword.length < 6) return setForgotError("Password must be at least 6 characters.");
+    if (forgotPassword !== forgotConfirm) return setForgotError("Passwords do not match.");
+    setForgotLoading(true);
+    setForgotError("");
+    setForgotInfo("");
+    try {
+      const res = await fetch(`${API}/forgot-password/update`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: forgotEmail, resetToken: forgotToken, password: forgotPassword }),
+      });
+      const data = await res.json();
+      if (!res.ok) return setForgotError(data.message || "Password update failed.");
+      closeForgot();
+      setPassword("");
+      showSuccessToast("Password updated successfully");
+    } catch {
+      setForgotError("Cannot connect to server. Please try again.");
+    } finally {
+      setForgotLoading(false);
+    }
+  };
+
   const fmt = (d) => d ? new Date(d).toLocaleString("en-IN", { day:"numeric", month:"short", year:"numeric", hour:"2-digit", minute:"2-digit" }) : "—";
 
   return (
@@ -182,6 +291,29 @@ export default function LoginPage() {
 
         .lp-err { display:flex; align-items:center; gap:8px; padding:10px 13px; background:#fff1f2; border:1px solid #fecdd3; border-radius:9px; font-size:12.5px; color:#e11d48; animation:lp-shake 0.35s ease; }
         @keyframes lp-shake { 0%,100%{transform:translateX(0)} 20%{transform:translateX(-5px)} 40%{transform:translateX(5px)} 60%{transform:translateX(-3px)} 80%{transform:translateX(3px)} }
+
+        .lp-forgot-row { display:flex; justify-content:flex-end; margin-top:-8px; }
+        .lp-forgot-btn { background:transparent; border:0; color:#6366f1; font-size:12.5px; font-weight:700; font-family:'Plus Jakarta Sans',sans-serif; cursor:pointer; padding:0; }
+        .lp-forgot-btn:hover { text-decoration:underline; color:#4f46e5; }
+        .fp-overlay { position:fixed; inset:0; z-index:1200; display:flex; align-items:center; justify-content:center; padding:18px; background:rgba(15,23,42,.56); backdrop-filter:blur(7px); animation:exp-fade .2s ease; }
+        .fp-modal { width:100%; max-width:430px; background:#fff; border-radius:22px; overflow:hidden; box-shadow:0 28px 70px rgba(15,23,42,.26); animation:exp-up .26s cubic-bezier(.16,1,.3,1); }
+        .fp-head { padding:24px 24px 18px; background:linear-gradient(135deg,#eef2ff,#f8fafc); border-bottom:1px solid #e2e8f0; display:flex; align-items:flex-start; justify-content:space-between; gap:14px; }
+        .fp-icon { width:48px; height:48px; border-radius:14px; display:flex; align-items:center; justify-content:center; background:#4f46e5; color:#fff; box-shadow:0 12px 26px rgba(79,70,229,.28); font-size:23px; }
+        .fp-title { font-size:18px; font-weight:800; color:#0f172a; margin:0 0 5px; }
+        .fp-sub { font-size:12.8px; color:#64748b; line-height:1.6; margin:0; }
+        .fp-close { border:0; background:#fff; color:#94a3b8; width:32px; height:32px; border-radius:10px; cursor:pointer; font-size:20px; line-height:1; box-shadow:0 1px 4px rgba(15,23,42,.08); }
+        .fp-body { padding:22px 24px 24px; display:flex; flex-direction:column; gap:15px; }
+        .fp-steps { display:grid; grid-template-columns:repeat(3,1fr); gap:7px; }
+        .fp-step { height:4px; border-radius:99px; background:#e2e8f0; }
+        .fp-step.on { background:linear-gradient(135deg,#4f46e5,#6366f1); }
+        .fp-msg { padding:10px 12px; border-radius:10px; font-size:12.5px; line-height:1.45; font-weight:650; }
+        .fp-msg.err { color:#e11d48; background:#fff1f2; border:1px solid #fecdd3; }
+        .fp-msg.ok { color:#047857; background:#ecfdf5; border:1px solid #a7f3d0; }
+        .fp-actions { display:flex; gap:10px; margin-top:2px; }
+        .fp-secondary { flex:1; padding:12px; border-radius:11px; border:1.5px solid #e2e8f0; background:#fff; color:#64748b; font-size:13px; font-weight:700; font-family:'Plus Jakarta Sans',sans-serif; cursor:pointer; }
+        .fp-primary { flex:2; padding:12px; border-radius:11px; border:0; background:linear-gradient(135deg,#4f46e5,#6366f1); color:#fff; font-size:13px; font-weight:800; font-family:'Plus Jakarta Sans',sans-serif; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:8px; box-shadow:0 10px 24px -12px rgba(79,70,229,.8); }
+        .fp-primary:disabled,.fp-secondary:disabled { opacity:.62; cursor:not-allowed; }
+        .lp-toast { position:fixed; left:50%; bottom:26px; z-index:1300; transform:translateX(-50%); padding:12px 16px; border-radius:12px; background:#ecfdf5; color:#047857; border:1px solid #a7f3d0; box-shadow:0 14px 34px rgba(15,23,42,.16); font-size:13px; font-weight:800; animation:exp-up .22s ease; white-space:nowrap; }
 
         .lp-blocked { padding:18px 20px; background:#fff7ed; border:1.5px solid #fed7aa; border-radius:13px; }
         .lp-blocked-title { display:flex; align-items:center; gap:9px; font-size:15px; font-weight:700; color:#c2410c; margin-bottom:8px; }
@@ -444,6 +576,130 @@ export default function LoginPage() {
       )}
 
       {/* ══ Main Login Page ══ */}
+      {forgotOpen && (
+        <div className="fp-overlay" role="dialog" aria-modal="true">
+          <div className="fp-modal">
+            <div className="fp-head">
+              <div style={{ display: "flex", gap: 14, alignItems: "flex-start" }}>
+                <div className="fp-icon">🔐</div>
+                <div>
+                  <h3 className="fp-title">Reset Password</h3>
+                  <p className="fp-sub">
+                    {forgotStep === "email" && "Enter your registered email to receive an OTP."}
+                    {forgotStep === "otp" && `We sent a verification code to ${forgotEmail}.`}
+                    {forgotStep === "password" && "Create a new password for your account."}
+                  </p>
+                </div>
+              </div>
+              <button type="button" className="fp-close" onClick={closeForgot} disabled={forgotLoading}>×</button>
+            </div>
+
+            <div className="fp-body">
+              <div className="fp-steps">
+                <span className={`fp-step ${["email", "otp", "password"].includes(forgotStep) ? "on" : ""}`} />
+                <span className={`fp-step ${["otp", "password"].includes(forgotStep) ? "on" : ""}`} />
+                <span className={`fp-step ${forgotStep === "password" ? "on" : ""}`} />
+              </div>
+
+              {forgotStep === "email" && (
+                <div className="lp-field">
+                  <label className="lp-lbl on">Registered Email</label>
+                  <input
+                    type="email"
+                    className={`lp-inp ${forgotError ? "err" : ""}`}
+                    value={forgotEmail}
+                    onChange={(e) => { setForgotEmail(e.target.value); setForgotError(""); }}
+                    placeholder="you@example.com"
+                    autoComplete="email"
+                  />
+                </div>
+              )}
+
+              {forgotStep === "otp" && (
+                <div className="lp-field">
+                  <label className="lp-lbl on">Enter OTP</label>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={5}
+                    className={`lp-inp ${forgotError ? "err" : ""}`}
+                    value={forgotOtp}
+                    onChange={(e) => { setForgotOtp(e.target.value.replace(/\D/g, "")); setForgotError(""); }}
+                    placeholder="5-digit OTP"
+                    autoComplete="one-time-code"
+                  />
+                </div>
+              )}
+
+              {forgotStep === "password" && (
+                <>
+                  <div className="lp-field">
+                    <label className="lp-lbl on">New Password</label>
+                    <div className="lp-iw">
+                      <input
+                        type={showForgotPassword ? "text" : "password"}
+                        className={`lp-inp ${forgotError ? "err" : ""}`}
+                        value={forgotPassword}
+                        onChange={(e) => { setForgotPassword(e.target.value); setForgotError(""); }}
+                        placeholder="Minimum 6 characters"
+                        autoComplete="new-password"
+                      />
+                      <button type="button" className="lp-eye-btn" onClick={() => setShowForgotPassword(p => !p)} tabIndex={-1}>
+                        {showForgotPassword
+                          ? <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+                          : <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                        }
+                      </button>
+                    </div>
+                  </div>
+                  <div className="lp-field">
+                    <label className="lp-lbl on">Confirm Password</label>
+                    <div className="lp-iw">
+                      <input
+                        type={showForgotConfirm ? "text" : "password"}
+                        className={`lp-inp ${forgotError ? "err" : ""}`}
+                        value={forgotConfirm}
+                        onChange={(e) => { setForgotConfirm(e.target.value); setForgotError(""); }}
+                        placeholder="Re-enter password"
+                        autoComplete="new-password"
+                      />
+                      <button type="button" className="lp-eye-btn" onClick={() => setShowForgotConfirm(p => !p)} tabIndex={-1}>
+                        {showForgotConfirm
+                          ? <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+                          : <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                        }
+                      </button>
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {forgotError && <div className="fp-msg err">⚠️ {forgotError}</div>}
+              {forgotInfo && !forgotError && <div className="fp-msg ok">✓ {forgotInfo}</div>}
+
+              <div className="fp-actions">
+                <button type="button" className="fp-secondary" onClick={closeForgot} disabled={forgotLoading}>
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="fp-primary"
+                  disabled={forgotLoading}
+                  onClick={forgotStep === "email" ? sendForgotOtp : forgotStep === "otp" ? verifyForgotOtp : updateForgotPassword}
+                >
+                  {forgotLoading && <span className="lp-spin" />}
+                  {forgotLoading
+                    ? forgotStep === "email" ? "Sending OTP..." : forgotStep === "otp" ? "Verifying..." : "Updating password..."
+                    : forgotStep === "email" ? "Send OTP" : forgotStep === "otp" ? "Verify OTP" : "Update Password"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {toast && <div className="lp-toast">✓ {toast}</div>}
+
       <div className="lp-root">
         <div className="lp-left">
           <div className="lp-left-blob1" /><div className="lp-left-blob2" />
@@ -486,6 +742,12 @@ export default function LoginPage() {
                     }
                   </button>
                 </div>
+              </div>
+
+              <div className="lp-forgot-row">
+                <button type="button" className="lp-forgot-btn" onClick={openForgot}>
+                  Forgot password?
+                </button>
               </div>
 
               {error && (
