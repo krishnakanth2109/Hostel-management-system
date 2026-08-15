@@ -35,11 +35,12 @@ import PublicTenantRentDetails from "./pages/PublicTenantRentDetails.jsx";
 import PaymentRequests from "./pages/PaymentRequests.jsx";
 
 const HOME_SEO = {
-  title: "NILAYAM Hostel Management Software | Hostel & PG Management System",
+  title: "NILAYAM Hostel Management Software | Hostel & PG Management",
   description:
     "NILAYAM is hostel management software for Indian hostel and PG owners to manage tenants, rooms, beds, rent payments, dues, reports, reminders and daily operations.",
   canonical: "https://nilayamhostelmanagement.in.net/",
   robots: "index, follow, max-image-preview:large",
+  siteName: "NILAYAM",
 };
 
 const NOINDEX_SEO = {
@@ -69,6 +70,7 @@ function RouteSeo() {
     setMeta("robots", seo.robots);
     setMeta("og:title", seo.title, "property");
     setMeta("og:description", seo.description, "property");
+    setMeta("og:site_name", seo.siteName || "NILAYAM", "property");
     setMeta("twitter:title", seo.title);
     setMeta("twitter:description", seo.description);
 
