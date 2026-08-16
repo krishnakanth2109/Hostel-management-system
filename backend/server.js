@@ -90,6 +90,64 @@ function addDays(date, days) {
   return d;
 }
 
+async function applyPlanExpiryIfNeeded(user) {
+  if (!user || user.role === "master" || !user.planExpiresAt) return false;
+
+  const expired = new Date() >= new Date(user.planExpiresAt);
+  if (!expired) return false;
+
+  let changed = false;
+  if (user.planStatus !== "expired") {
+    user.planStatus = "expired";
+    changed = true;
+  }
+  if (user.loginStatus !== "blocked") {
+    user.loginStatus = "blocked";
+    changed = true;
+  }
+  if (changed) await user.save();
+  return true;
+}
+
+function expiredPlanPayload(user) {
+  return {
+    message: "Your plan has expired. Please renew to continue.",
+    planExpired: true,
+    planInfo: {
+      planName:        user.planName,
+      planActivatedAt: user.planActivatedAt,
+      planExpiresAt:   user.planExpiresAt,
+      planRenewalAt:   user.planRenewalAt,
+      usedFreePlan:    user.usedFreePlan,
+      planBeds:        user.planBeds,
+      plan:            user.plan,
+    },
+    extensionPending: user.extensionRequest?.requested || false,
+    userId: user._id,
+    userInfo: {
+      name:    user.name,
+      owner:   user.owner,
+      email:   user.email,
+      ph:      user.ph,
+      address: user.address,
+    },
+  };
+}
+
+function blockedLoginPayload(user) {
+  return {
+    message: "Your login has been stopped by Nilayam management. Please contact support for more information.",
+    blocked: true,
+    userInfo: {
+      name:    user.name,
+      owner:   user.owner,
+      email:   user.email,
+      ph:      user.ph,
+      address: user.address,
+    },
+  };
+}
+
 const passwordResetStore = new Map();
 setInterval(() => {
   const now = Date.now();
@@ -177,9 +235,18 @@ app.get("/api/profile", authMiddleware, async (req, res) => {
   try {
     const user = await User.findById(req.user.id)
       .select("-password")
-      .populate("plan", "name price days beds isFree")
-      .lean();
+      .populate("plan", "name price days beds isFree");
     if (!user) return res.status(404).json({ message: "User not found." });
+
+    const expired = await applyPlanExpiryIfNeeded(user);
+    if (expired) {
+      return res.status(403).json(expiredPlanPayload(user));
+    }
+
+    if (user.role !== "master" && user.loginStatus === "blocked") {
+      return res.status(403).json(blockedLoginPayload(user));
+    }
+
     res.json(user);
   } catch (err) {
     res.status(500).json({ message: "Server error.", error: err.message });
@@ -444,66 +511,27 @@ app.post("/api/login", async (req, res) => {
     }
 
     // ── Blocked ───────────────────────────────────────────────────────────────
+    if (user.role !== "master" && user.loginStatus === "blocked" && user.planStatus === "expired") {
+      return res.status(403).json(expiredPlanPayload(user));
+    }
+
     if (user.role !== "master" && user.loginStatus === "blocked") {
-      return res.status(403).json({
-        message: "Your login has been stopped by the website owner. Please contact support.",
-        blocked: true,
-      });
+      return res.status(403).json(blockedLoginPayload(user));
     }
 
     // ── Plan expiry check (runs for ALL non-master users who have a plan) ─────
     if (user.role !== "master" && user.planExpiresAt) {
       const now = new Date();
-      if (now > new Date(user.planExpiresAt)) {
-        if (user.planStatus !== "expired") {
-          user.planStatus = "expired";
-          await user.save();
-        }
-        return res.status(403).json({
-          message: "Your plan has expired. Please renew to continue.",
-          planExpired: true,
-          planInfo: {
-            planName:        user.planName,
-            planActivatedAt: user.planActivatedAt,
-            planExpiresAt:   user.planExpiresAt,
-            planRenewalAt:   user.planRenewalAt,
-            usedFreePlan:    user.usedFreePlan,
-          },
-          extensionPending: user.extensionRequest?.requested || false,
-          userId: user._id,
-          userInfo: {
-            name:    user.name,
-            owner:   user.owner,
-            email:   user.email,
-            ph:      user.ph,
-            address: user.address,
-          },
-        });
+      if (now >= new Date(user.planExpiresAt)) {
+        await applyPlanExpiryIfNeeded(user);
+        return res.status(403).json(expiredPlanPayload(user));
       }
     }
 
     // ── Also block if already marked expired ─────────────────────────────────
     if (user.role !== "master" && user.planStatus === "expired") {
-      return res.status(403).json({
-        message: "Your plan has expired. Please renew to continue.",
-        planExpired: true,
-        planInfo: {
-          planName:        user.planName,
-          planActivatedAt: user.planActivatedAt,
-          planExpiresAt:   user.planExpiresAt,
-          planRenewalAt:   user.planRenewalAt,
-          usedFreePlan:    user.usedFreePlan,
-        },
-        extensionPending: user.extensionRequest?.requested || false,
-        userId: user._id,
-        userInfo: {
-          name:    user.name,
-          owner:   user.owner,
-          email:   user.email,
-          ph:      user.ph,
-          address: user.address,
-        },
-      });
+      await applyPlanExpiryIfNeeded(user);
+      return res.status(403).json(expiredPlanPayload(user));
     }
 
     const token = jwt.sign(

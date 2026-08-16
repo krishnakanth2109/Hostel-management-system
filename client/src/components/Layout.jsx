@@ -95,11 +95,262 @@ const GLOBAL_STYLES = `
   .profile-scrollable::-webkit-scrollbar { width: 5px; }
   .profile-scrollable::-webkit-scrollbar-track { background: transparent; }
   .profile-scrollable::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+  @keyframes plan-expired-pop {
+    from { opacity:0; transform:translateY(18px) scale(0.96); }
+    to   { opacity:1; transform:translateY(0) scale(1); }
+  }
 `;
 
 // ═════════════════════════════════════════════════════════════════════════════
 // ─── Profile Modal ────────────────────────────────────────────────────────────
 // ═════════════════════════════════════════════════════════════════════════════
+function PlanExpiredLogoutModal({ details, countdown }) {
+  const safeDetails = details || {};
+  const planRows = [
+    ["Plan", safeDetails.planName || "-"],
+    ["Activated", fmtDate(safeDetails.planActivatedAt)],
+    ["Expired", fmtDate(safeDetails.planExpiresAt)],
+    ["Renewal", fmtDate(safeDetails.planRenewalAt)],
+    ["Price", safeDetails.price != null ? `Rs. ${Number(safeDetails.price).toLocaleString("en-IN")}` : "-"],
+    ["Duration", safeDetails.days != null ? `${safeDetails.days} days` : "-"],
+    ["Bed Limit", safeDetails.beds != null ? `${safeDetails.beds} beds` : "-"],
+    ["Email", safeDetails.email || "-"],
+  ];
+
+  return (
+    <div
+      role="alertdialog"
+      aria-modal="true"
+      style={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 10000,
+        background: "rgba(15,23,42,0.62)",
+        backdropFilter: "blur(8px)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: 18,
+      }}
+    >
+      <div
+        style={{
+          width: "100%",
+          maxWidth: 560,
+          background: "#fff",
+          borderRadius: 22,
+          overflow: "hidden",
+          boxShadow: "0 24px 70px rgba(15,23,42,0.28)",
+          animation: "plan-expired-pop 0.28s cubic-bezier(0.34,1.56,0.64,1)",
+        }}
+      >
+        <div style={{
+          background: "linear-gradient(135deg,#991b1b,#dc2626,#f97316)",
+          color: "#fff",
+          padding: "26px 28px",
+          display: "flex",
+          gap: 16,
+          alignItems: "center",
+        }}>
+          <div style={{
+            width: 54,
+            height: 54,
+            borderRadius: 16,
+            background: "rgba(255,255,255,0.18)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            flexShrink: 0,
+          }}>
+            <AlertCircle size={30} />
+          </div>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, opacity: 0.86, marginBottom: 5 }}>
+              Plan session completed
+            </div>
+            <h2 style={{ margin: 0, fontSize: 22, lineHeight: 1.22, fontWeight: 800 }}>
+              Hi {safeDetails.name || "User"}, your plan has expired
+            </h2>
+          </div>
+        </div>
+
+        <div style={{ padding: "24px 28px 28px" }}>
+          <p style={{ margin: "0 0 18px", color: "#475569", lineHeight: 1.65, fontSize: 14 }}>
+            Your current NILAYAM plan session has been completed. We are logging you out in{" "}
+            <strong style={{ color: "#dc2626" }}>{countdown} sec</strong>.
+            Please contact the NILAYAM management support team or upgrade your plan to continue using the portal.
+          </p>
+
+          <div style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))",
+            gap: 10,
+            marginBottom: 18,
+          }}>
+            {planRows.map(([label, value]) => (
+              <div key={label} style={{
+                border: "1px solid #e2e8f0",
+                background: "#f8fafc",
+                borderRadius: 10,
+                padding: "10px 12px",
+                minWidth: 0,
+              }}>
+                <div style={{ fontSize: 10, fontWeight: 800, color: "#94a3b8", textTransform: "uppercase", marginBottom: 4 }}>
+                  {label}
+                </div>
+                <div style={{
+                  color: "#0f172a",
+                  fontSize: 13,
+                  fontWeight: 700,
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                }}>
+                  {value}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div style={{
+            background: "#fff7ed",
+            border: "1px solid #fed7aa",
+            color: "#9a3412",
+            borderRadius: 12,
+            padding: "12px 14px",
+            fontSize: 13,
+            lineHeight: 1.55,
+            fontWeight: 600,
+          }}>
+            Access is temporarily blocked until the plan is renewed or upgraded by NILAYAM management.
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function LoginStoppedLogoutModal({ details, countdown }) {
+  const safeDetails = details || {};
+
+  return (
+    <div
+      role="alertdialog"
+      aria-modal="true"
+      style={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 10001,
+        background: "rgba(15,23,42,0.62)",
+        backdropFilter: "blur(8px)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: 18,
+      }}
+    >
+      <div
+        style={{
+          width: "100%",
+          maxWidth: 520,
+          background: "#fff",
+          borderRadius: 22,
+          overflow: "hidden",
+          boxShadow: "0 24px 70px rgba(15,23,42,0.28)",
+          animation: "plan-expired-pop 0.28s cubic-bezier(0.34,1.56,0.64,1)",
+        }}
+      >
+        <div style={{
+          background: "linear-gradient(135deg,#7f1d1d,#b91c1c,#ef4444)",
+          color: "#fff",
+          padding: "26px 28px",
+          display: "flex",
+          gap: 16,
+          alignItems: "center",
+        }}>
+          <div style={{
+            width: 54,
+            height: 54,
+            borderRadius: 16,
+            background: "rgba(255,255,255,0.18)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            flexShrink: 0,
+          }}>
+            <AlertCircle size={30} />
+          </div>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, opacity: 0.86, marginBottom: 5 }}>
+              Login access stopped
+            </div>
+            <h2 style={{ margin: 0, fontSize: 22, lineHeight: 1.22, fontWeight: 800 }}>
+              Hi {safeDetails.name || "User"}, your login has been stopped
+            </h2>
+          </div>
+        </div>
+
+        <div style={{ padding: "24px 28px 28px" }}>
+          <p style={{ margin: "0 0 18px", color: "#475569", lineHeight: 1.65, fontSize: 14 }}>
+            Your login has been stopped by NILAYAM management. Please contact the support team for more information.
+            You will be logged out in{" "}
+            <strong style={{ color: "#dc2626" }}>{countdown} sec</strong>.
+          </p>
+
+          <div style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit,minmax(160px,1fr))",
+            gap: 10,
+            marginBottom: 18,
+          }}>
+            {[
+              ["Owner", safeDetails.name || "-"],
+              ["Email", safeDetails.email || "-"],
+              ["Phone", safeDetails.ph || "-"],
+              ["Address", safeDetails.address || "-"],
+            ].map(([label, value]) => (
+              <div key={label} style={{
+                border: "1px solid #e2e8f0",
+                background: "#f8fafc",
+                borderRadius: 10,
+                padding: "10px 12px",
+                minWidth: 0,
+              }}>
+                <div style={{ fontSize: 10, fontWeight: 800, color: "#94a3b8", textTransform: "uppercase", marginBottom: 4 }}>
+                  {label}
+                </div>
+                <div style={{
+                  color: "#0f172a",
+                  fontSize: 13,
+                  fontWeight: 700,
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                }}>
+                  {value}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div style={{
+            background: "#fef2f2",
+            border: "1px solid #fecaca",
+            color: "#991b1b",
+            borderRadius: 12,
+            padding: "12px 14px",
+            fontSize: 13,
+            lineHeight: 1.55,
+            fontWeight: 600,
+          }}>
+            Access will remain unavailable until NILAYAM management restores your login.
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ProfileModal({ onClose, onProfileUpdated }) {
   const [profile, setProfile]   = useState(null);
   const [loading, setLoading]   = useState(true);
@@ -879,6 +1130,66 @@ export default function Layout({ children }) {
 
   // ── Profile modal state ─────────────────────────────────────────────────────
   const [profileOpen, setProfileOpen] = useState(false);
+  const [planProfile, setPlanProfile] = useState(user || null);
+  const [expiredPlanDetails, setExpiredPlanDetails] = useState(null);
+  const [logoutCountdown, setLogoutCountdown] = useState(60);
+  const [blockedLoginDetails, setBlockedLoginDetails] = useState(null);
+  const [blockedLogoutCountdown, setBlockedLogoutCountdown] = useState(30);
+  const logoutStartedRef = useRef(false);
+  const blockedLogoutStartedRef = useRef(false);
+  const latestPlanProfileRef = useRef(user || null);
+
+  const normalizePlanDetails = useCallback((source) => {
+    const planInfo = source?.planInfo || source || {};
+    const userInfo = source?.userInfo || source || {};
+    const plan = planInfo.plan || source?.plan || {};
+
+    return {
+      name: userInfo.owner || userInfo.name || source?.owner || source?.name || "User",
+      email: userInfo.email || source?.email || "",
+      planName: planInfo.planName || plan.name || source?.planName || "Current Plan",
+      planActivatedAt: planInfo.planActivatedAt || source?.planActivatedAt,
+      planExpiresAt: planInfo.planExpiresAt || source?.planExpiresAt,
+      planRenewalAt: planInfo.planRenewalAt || source?.planRenewalAt,
+      price: plan.price,
+      days: plan.days,
+      beds: planInfo.planBeds ?? source?.planBeds ?? plan.beds,
+    };
+  }, []);
+
+  const beginExpiredPlanLogout = useCallback((source) => {
+    if (logoutStartedRef.current) return;
+    logoutStartedRef.current = true;
+    setExpiredPlanDetails(normalizePlanDetails(source));
+    setLogoutCountdown(60);
+  }, [normalizePlanDetails]);
+
+  const finishExpiredPlanLogout = useCallback(() => {
+    clearSession();
+    navigate("/login", { replace: true });
+  }, [navigate]);
+
+  const normalizeBlockedDetails = useCallback((source) => {
+    const userInfo = source?.userInfo || source || {};
+    return {
+      name: userInfo.owner || userInfo.name || source?.owner || source?.name || "User",
+      email: userInfo.email || source?.email || "",
+      ph: userInfo.ph || source?.ph || "",
+      address: userInfo.address || source?.address || "",
+    };
+  }, []);
+
+  const beginBlockedLoginLogout = useCallback((source) => {
+    if (blockedLogoutStartedRef.current || logoutStartedRef.current) return;
+    blockedLogoutStartedRef.current = true;
+    setBlockedLoginDetails(normalizeBlockedDetails(source));
+    setBlockedLogoutCountdown(30);
+  }, [normalizeBlockedDetails]);
+
+  const finishBlockedLoginLogout = useCallback(() => {
+    clearSession();
+    navigate("/login", { replace: true });
+  }, [navigate]);
 
   // Handle window resizing
   useEffect(() => {
@@ -893,6 +1204,115 @@ export default function Layout({ children }) {
   }, []);
 
   // ── Fetch notifications ─────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!expiredPlanDetails) return;
+
+    const id = setInterval(() => {
+      setLogoutCountdown((prev) => Math.max(prev - 1, 0));
+    }, 1000);
+
+    return () => clearInterval(id);
+  }, [expiredPlanDetails]);
+
+  useEffect(() => {
+    if (expiredPlanDetails && logoutCountdown <= 0) {
+      finishExpiredPlanLogout();
+    }
+  }, [expiredPlanDetails, finishExpiredPlanLogout, logoutCountdown]);
+
+  useEffect(() => {
+    if (!blockedLoginDetails) return;
+
+    const id = setInterval(() => {
+      setBlockedLogoutCountdown((prev) => Math.max(prev - 1, 0));
+    }, 1000);
+
+    return () => clearInterval(id);
+  }, [blockedLoginDetails]);
+
+  useEffect(() => {
+    if (blockedLoginDetails && blockedLogoutCountdown <= 0) {
+      finishBlockedLoginLogout();
+    }
+  }, [blockedLoginDetails, blockedLogoutCountdown, finishBlockedLoginLogout]);
+
+  const refreshPlanSession = useCallback(async () => {
+    if (!user?.id || logoutStartedRef.current || blockedLogoutStartedRef.current) return;
+
+    try {
+      const res = await fetch(`${API}/profile`, { headers: authHeaders() });
+      const data = await res.json().catch(() => ({}));
+
+      if (res.status === 403 && data?.planExpired) {
+        beginExpiredPlanLogout(data);
+        return;
+      }
+      if (res.status === 403 && data?.blocked) {
+        beginBlockedLoginLogout(data);
+        return;
+      }
+      if (!res.ok) return;
+
+      latestPlanProfileRef.current = data;
+      setPlanProfile(data);
+
+      const currentUser = getSession() || user;
+      const updatedSession = {
+        ...currentUser,
+        id: data._id || data.id || currentUser.id,
+        name: data.name,
+        owner: data.owner,
+        email: data.email,
+        role: data.role,
+        loginStatus: data.loginStatus,
+        planStatus: data.planStatus,
+        planName: data.planName,
+        planActivatedAt: data.planActivatedAt,
+        planExpiresAt: data.planExpiresAt,
+        planRenewalAt: data.planRenewalAt,
+        planBeds: data.planBeds,
+      };
+      sessionStorage.setItem("user", JSON.stringify(updatedSession));
+
+      if (data.planExpiresAt && new Date(data.planExpiresAt).getTime() <= Date.now()) {
+        beginExpiredPlanLogout(data);
+      }
+    } catch {
+      // Keep the local expiry timer active if the network check fails.
+    }
+  }, [beginBlockedLoginLogout, beginExpiredPlanLogout, user?.id]);
+
+  useEffect(() => {
+    if (!user?.id) return;
+
+    refreshPlanSession();
+    const id = setInterval(refreshPlanSession, 30000);
+    return () => clearInterval(id);
+  }, [refreshPlanSession, user?.id]);
+
+  useEffect(() => {
+    if (logoutStartedRef.current) return;
+
+    const source = planProfile || latestPlanProfileRef.current || user;
+    const expiresAt = source?.planExpiresAt;
+    if (!expiresAt) return;
+
+    const msUntilExpiry = new Date(expiresAt).getTime() - Date.now();
+    if (msUntilExpiry <= 0) {
+      beginExpiredPlanLogout(source);
+      return;
+    }
+
+    const maxTimeout = 2147483647;
+    if (msUntilExpiry > maxTimeout) return;
+
+    const id = setTimeout(() => {
+      beginExpiredPlanLogout(latestPlanProfileRef.current || source);
+    }, msUntilExpiry);
+
+    return () => clearTimeout(id);
+  }, [beginExpiredPlanLogout, planProfile?.planExpiresAt, user?.planExpiresAt]);
+
   const fetchNotifications = useCallback(async () => {
     try {
       const res = await fetch(`${API}/tenants?source=onboarding-link`, {
@@ -1215,6 +1635,20 @@ export default function Layout({ children }) {
       )}
 
       {/* ── PROFILE MODAL ──────────────────────────────────────────────────── */}
+      {expiredPlanDetails && (
+        <PlanExpiredLogoutModal
+          details={expiredPlanDetails}
+          countdown={logoutCountdown}
+        />
+      )}
+
+      {blockedLoginDetails && (
+        <LoginStoppedLogoutModal
+          details={blockedLoginDetails}
+          countdown={blockedLogoutCountdown}
+        />
+      )}
+
       {profileOpen && (
         <ProfileModal
           onClose={() => setProfileOpen(false)}
