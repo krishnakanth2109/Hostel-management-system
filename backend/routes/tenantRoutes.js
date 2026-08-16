@@ -8,6 +8,7 @@ import axios from "axios";
 import dotenv from "dotenv";
 import { fileURLToPath } from "url";
 import Tenant from "../models/Tenant.js";
+import RentPayment from "../models/Rentpayment.js";
 import Building from "../models/Building.js";
 import User from "../models/User.js";
 import jwt from "jsonwebtoken";
@@ -347,6 +348,68 @@ function isFutureJoiningDate(joiningDate) {
   const todayEnd = new Date();
   todayEnd.setHours(23, 59, 59, 999);
   return selected.getTime() > todayEnd.getTime();
+}
+
+function parseJoiningDate(joiningDate) {
+  if (!joiningDate) return null;
+  const value = joiningDate instanceof Date
+    ? joiningDate
+    : new Date(typeof joiningDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(joiningDate)
+      ? `${joiningDate}T00:00:00`
+      : joiningDate);
+  return Number.isNaN(value.getTime()) ? null : value;
+}
+
+function monthIndex(date) {
+  return date.getFullYear() * 12 + date.getMonth();
+}
+
+function parseMonthYear(monthYear) {
+  if (!/^\d{4}-\d{2}$/.test(monthYear || "")) return null;
+  const [year, monthNumber] = monthYear.split("-").map(Number);
+  if (monthNumber < 1 || monthNumber > 12) return null;
+  return { year, month: monthNumber - 1 };
+}
+
+function getDueDateForJoiningCycle(joiningDate, year, month) {
+  const joinDay = joiningDate.getDate();
+  const lastDay = new Date(year, month + 1, 0).getDate();
+  return new Date(year, month, Math.min(joinDay, lastDay));
+}
+
+async function cleanupRentPaymentsBeforeJoiningDate({ tenantId, ownerId, joiningDate, previousJoiningDate }) {
+  const nextJoiningDate = parseJoiningDate(joiningDate);
+  const oldJoiningDate = parseJoiningDate(previousJoiningDate);
+  if (!nextJoiningDate || !oldJoiningDate) return { removedCount: 0, updatedCount: 0 };
+
+  const nextStartMonth = monthIndex(nextJoiningDate);
+  const oldStartMonth = monthIndex(oldJoiningDate);
+  const shouldRemovePastMonths = nextStartMonth > oldStartMonth;
+
+  const rentDoc = await RentPayment.findOne({ tenantId, owner: ownerId });
+  if (!rentDoc) return { removedCount: 0, updatedCount: 0 };
+
+  const originalCount = rentDoc.monthlyPayments.length;
+  let updatedCount = 0;
+  rentDoc.monthlyPayments = rentDoc.monthlyPayments.filter((payment) => {
+    const parsed = parseMonthYear(payment.monthYear);
+    if (!parsed) return true;
+
+    if (shouldRemovePastMonths && monthIndex(new Date(parsed.year, parsed.month, 1)) < nextStartMonth) {
+      return false;
+    }
+
+    const nextDueDate = getDueDateForJoiningCycle(nextJoiningDate, parsed.year, parsed.month);
+    if (new Date(payment.dueDate).getTime() !== nextDueDate.getTime()) {
+      payment.dueDate = nextDueDate;
+      updatedCount++;
+    }
+    return true;
+  });
+
+  const removedCount = originalCount - rentDoc.monthlyPayments.length;
+  if (removedCount > 0 || updatedCount > 0) await rentDoc.save();
+  return { removedCount, updatedCount };
 }
 
 // Generate (or rather, resolve) the owner's PERMANENT Onboarding Link.
@@ -712,6 +775,14 @@ router.put("/:id", auth, upload.fields([{ name: "aadharFront" }, { name: "aadhar
     if (Object.prototype.hasOwnProperty.call(updateData, "rentAmount")) {
       updateData.rentAmount = Number(updateData.rentAmount || 0);
     }
+    if (Object.prototype.hasOwnProperty.call(updateData, "joiningDate")) {
+      if (!parseJoiningDate(updateData.joiningDate)) {
+        return res.status(400).json({ message: "Enter a valid joining date." });
+      }
+      if (isFutureJoiningDate(updateData.joiningDate)) {
+        return res.status(400).json({ message: "Joining date cannot be in the future." });
+      }
+    }
     if (Object.prototype.hasOwnProperty.call(updateData, "advanceAmount")) {
       updateData.advanceAmount = Number(updateData.advanceAmount || 0);
       advanceAmountWasChanged = updateData.advanceAmount !== previousAdvanceAmount;
@@ -728,6 +799,16 @@ router.put("/:id", auth, upload.fields([{ name: "aadharFront" }, { name: "aadhar
       { _id: req.params.id, owner: req.user.id },
       updateData, { new: true, runValidators: true }
     );
+
+    let rentPaymentCleanup = { removedCount: 0, updatedCount: 0 };
+    if (Object.prototype.hasOwnProperty.call(updateData, "joiningDate")) {
+      rentPaymentCleanup = await cleanupRentPaymentsBeforeJoiningDate({
+        tenantId: updatedTenant._id,
+        ownerId: req.user.id,
+        joiningDate: updatedTenant.joiningDate,
+        previousJoiningDate: existingTenant.joiningDate,
+      });
+    }
 
     const info = existingTenant.allocationInfo;
     const loc = info?.buildingName ? `(${info.buildingName} ➔ Room ${info.roomNumber})` : "(Unallocated)";
@@ -755,6 +836,7 @@ router.put("/:id", auth, upload.fields([{ name: "aadharFront" }, { name: "aadhar
     res.json({
       message: "Tenant updated.",
       tenant: withOptimizedTenantDocuments(updatedTenant),
+      rentPaymentCleanup,
     });
   } catch (err) { res.status(500).json({ message: "Server error.", error: err.message }); }
 });

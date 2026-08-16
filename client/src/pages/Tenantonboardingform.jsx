@@ -13,7 +13,18 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useParams } from "react-router-dom";
-import { CalendarDays, Info } from "lucide-react";
+import {
+  AlertTriangle,
+  BedDouble,
+  CalendarDays,
+  Check,
+  Home,
+  Info,
+  IndianRupee,
+  Mail,
+  Phone,
+  User,
+} from "lucide-react";
 import { API } from "../api.js";
 import appLogo from "../assets/app-logo-transparent.png";
 
@@ -30,6 +41,70 @@ const INIT = {
   rentAmount: "",
   advanceAmount: "",
 };
+
+const formatINR = (value) =>
+  new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
+    maximumFractionDigits: 0,
+  }).format(Number(value || 0));
+
+const formatDate = (value) => {
+  if (!value) return "Not provided";
+  const date = new Date(`${value}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return "Not provided";
+  return date.toLocaleDateString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+};
+
+const formatMonth = (date) =>
+  date.toLocaleDateString("en-IN", { month: "short", year: "numeric" });
+
+function getRentDueBreakdown(joiningDate, rentAmount) {
+  const start = joiningDate ? new Date(`${joiningDate}T00:00:00`) : null;
+  const monthlyRent = Number(rentAmount || 0);
+  if (!start || Number.isNaN(start.getTime()) || monthlyRent <= 0) {
+    return { months: [], total: 0, pendingFrom: "Not available" };
+  }
+
+  const now = new Date();
+  const joinDay = start.getDate();
+  const months = [];
+  let year = start.getFullYear();
+  let month = start.getMonth();
+  let guard = 0;
+
+  while (guard < 1200) {
+    guard++;
+    const cycleMonthStart = new Date(year, month, 1);
+    const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    if (cycleMonthStart > currentMonthStart) break;
+
+    const lastDay = new Date(year, month + 1, 0).getDate();
+    const dueDate = new Date(year, month, Math.min(joinDay, lastDay));
+    months.push({
+      key: `${year}-${String(month + 1).padStart(2, "0")}`,
+      label: formatMonth(dueDate),
+      dueDate: formatDate(`${year}-${String(month + 1).padStart(2, "0")}-${String(dueDate.getDate()).padStart(2, "0")}`),
+      amount: monthlyRent,
+    });
+
+    month++;
+    if (month > 11) {
+      month = 0;
+      year++;
+    }
+  }
+
+  return {
+    months,
+    total: months.length * monthlyRent,
+    pendingFrom: months[0]?.dueDate || formatDate(joiningDate),
+  };
+}
 
 /* ─── tiny helpers ────────────────────────────────────────────────── */
 const inp = {
@@ -475,6 +550,127 @@ const set = k => e => {
       </div>
     </div>
   );
+
+  if (pageStatus === "success") {
+    const selectedBuilding = buildings.find((building) => building._id === selBuilding);
+    const selectedFloor = selectedBuilding?.floors?.find((floor) => floor._id === selFloor);
+    const selectedRoom = selectedFloor?.rooms?.find((room) => room._id === selRoom);
+    const selectedBed = selectedRoom?.beds?.find((bed) => bed._id === selBed) || availBeds.find((bed) => bed._id === selBed);
+    const rentDues = getRentDueBreakdown(form.joiningDate, form.rentAmount);
+    const propertyName = selectedBuilding?.buildingName || "Not provided";
+    const roomNumber = selectedRoom?.roomNumber ? `Room ${selectedRoom.roomNumber}` : "Room not provided";
+    const bedNumber = selectedBed?.bedNumber ? `Bed ${selectedBed.bedNumber}` : "Bed not provided";
+    const detailItems = [
+      { icon: User, label: "Full Name", value: form.name || "Not provided" },
+      { icon: Phone, label: "Phone Number", value: form.phone ? `+91 ${form.phone}` : "Not provided" },
+      { icon: Mail, label: "Email", value: form.email || "Not provided" },
+      { icon: Home, label: "Property / Hostel Name", value: selectedBuilding?.buildingName || "Not provided" },
+      { icon: BedDouble, label: "Your Bed Loc", value: `${propertyName} / ${roomNumber} / ${bedNumber}` },
+      { icon: CalendarDays, label: "Joining Date", value: formatDate(form.joiningDate) },
+    ];
+
+    return (
+      <div style={successRootStyle}>
+        <style>{`
+          @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
+          * { box-sizing: border-box; }
+          body { margin: 0; }
+          .success-shell { width: min(100%, 1020px); margin: 0 auto; padding: 28px 22px 34px; }
+          .success-panel { background: rgba(255,255,255,0.94); border: 1px solid rgba(203,213,225,0.74); border-radius: 24px; box-shadow: 0 24px 70px rgba(15,23,42,0.10); padding: clamp(20px, 3vw, 34px); }
+          .submitted-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+          .rent-summary-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0; }
+          .rent-summary-cell + .rent-summary-cell { border-left: 1px solid #fed7aa; }
+          @media (max-width: 720px) {
+            .success-shell { padding: 16px 12px 24px; }
+            .success-panel { border-radius: 18px; padding: 18px 14px; }
+            .submitted-grid, .rent-summary-grid { grid-template-columns: 1fr; }
+            .rent-summary-cell + .rent-summary-cell { border-left: 0; border-top: 1px solid #fed7aa; }
+          }
+        `}</style>
+
+        <main className="success-shell">
+          <section className="success-panel">
+            <div style={successTopStyle}>
+              <div style={successIconStyle}><Check size={42} strokeWidth={3.2} /></div>
+              <h1 style={successTitleStyle}>You're all set! 🎉</h1>
+              <p style={successSubtitleStyle}>{successMsg || "Registered successfully!"}</p>
+            </div>
+
+            <p style={successReviewTextStyle}>
+              Please carefully check the details you submitted, which are displayed below, and also review the Rent Dues shown below.
+            </p>
+
+            <div style={roomAllocatedStyle}>
+              <div style={roomIconStyle}><Home size={22} strokeWidth={2.4} /></div>
+              <div>
+                <p style={roomTitleStyle}>Room Allocated Successfully</p>
+                <p style={roomTextStyle}>Check with your manager for check-in instructions.</p>
+              </div>
+            </div>
+
+            <section style={successCardStyle}>
+              <div style={sectionHeadingWrapStyle}>
+                <div style={sectionIconStyle}><User size={20} strokeWidth={2.4} /></div>
+                <div>
+                  <h2 style={sectionTitleStyle}>Submitted Details</h2>
+                  <p style={sectionSubStyle}>Important information received during onboarding.</p>
+                </div>
+              </div>
+              <div className="submitted-grid">
+                {detailItems.map((item) => <SuccessDetailItem key={item.label} {...item} />)}
+              </div>
+            </section>
+
+            <section style={successCardStyle}>
+              <div style={sectionHeadingWrapStyle}>
+                <div style={{ ...sectionIconStyle, background: "#fff7ed", color: "#ea580c" }}>
+                  <IndianRupee size={20} strokeWidth={2.5} />
+                </div>
+                <div>
+                  <h2 style={{ ...sectionTitleStyle, color: "#7c2d12" }}>Rent Dues</h2>
+                  <p style={sectionSubStyle}>Based on the date you selected, your pending rent details are shown below.</p>
+                </div>
+              </div>
+
+              <div className="rent-summary-grid" style={rentSummaryStyle}>
+                <div className="rent-summary-cell" style={rentSummaryCellStyle}>
+                  <span style={rentSummaryLabelStyle}>Pending Rent From</span>
+                  <strong style={rentSummaryValueStyle}>{rentDues.pendingFrom}</strong>
+                </div>
+                <div className="rent-summary-cell" style={rentSummaryCellStyle}>
+                  <span style={rentSummaryLabelStyle}>Total Pending Rent</span>
+                  <strong style={rentAmountStyle}>{formatINR(rentDues.total)}</strong>
+                </div>
+              </div>
+
+              {rentDues.months.length > 0 && (
+                <div style={duesBreakdownStyle}>
+                  <p style={duesBreakdownTitleStyle}>Monthly Dues Breakdown</p>
+                  <div style={duesListStyle}>
+                    {rentDues.months.map((month) => (
+                      <div key={month.key} style={duesRowStyle}>
+                        <span>{month.label}</span>
+                        <strong>{formatINR(month.amount)}</strong>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div style={rentWarningStyle}>
+                <AlertTriangle size={22} strokeWidth={2.5} style={{ color: "#f59e0b", flex: "0 0 auto", marginTop: 1 }} />
+                <p style={{ margin: 0 }}>
+                  If you find any incorrect information in your rent dues or dates, please <strong>contact your owner immediately</strong> and ask them to update it.
+                </p>
+              </div>
+            </section>
+
+            <p style={thankYouStyle}>Thank you for choosing NILAYAM.</p>
+          </section>
+        </main>
+      </div>
+    );
+  }
 
   if (pageStatus === "success") return (
     <div style={rootStyle}>
@@ -989,6 +1185,18 @@ function TwoCol({ children }) {
   );
 }
 
+function SuccessDetailItem({ icon: Icon, label, value }) {
+  return (
+    <div style={successDetailItemStyle}>
+      <div style={successDetailIconStyle}><Icon size={17} strokeWidth={2.4} /></div>
+      <div style={{ minWidth: 0 }}>
+        <p style={successDetailLabelStyle}>{label}</p>
+        <p style={successDetailValueStyle}>{value}</p>
+      </div>
+    </div>
+  );
+}
+
 function FocusTarea({ placeholder, value, onChange }) {
   const [focused, setFocused] = useState(false);
   return (
@@ -1073,6 +1281,274 @@ const spinnerStyle = {
   borderTop: "3px solid #6366f1", borderRadius: "50%",
   animation: "ob-spin 0.8s linear infinite",
 };
+
+const successRootStyle = {
+  minHeight: "100vh",
+  background: "linear-gradient(135deg,#eef6ff 0%,#f8fafc 45%,#ecfdf5 100%)",
+  fontFamily: "'Plus Jakarta Sans', sans-serif",
+  color: "#0f172a",
+};
+
+const successTopStyle = {
+  display: "flex",
+  flexDirection: "column",
+  alignItems: "center",
+  textAlign: "center",
+  padding: "8px 0 22px",
+};
+
+const successIconStyle = {
+  width: 86,
+  height: 86,
+  borderRadius: "50%",
+  background: "linear-gradient(135deg,#16a34a,#34d399)",
+  color: "#fff",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  boxShadow: "0 14px 32px rgba(22,163,74,0.24), 0 0 0 12px rgba(34,197,94,0.13)",
+  marginBottom: 18,
+};
+
+const successTitleStyle = {
+  margin: "0 0 6px",
+  color: "#102a43",
+  fontSize: "clamp(22px, 4vw, 32px)",
+  lineHeight: 1.18,
+  fontWeight: 800,
+  letterSpacing: 0,
+};
+
+const successSubtitleStyle = {
+  margin: 0,
+  color: "#475569",
+  fontSize: "clamp(13px, 2.4vw, 15px)",
+  lineHeight: 1.6,
+  fontWeight: 600,
+};
+
+const successReviewTextStyle = {
+  margin: "0 0 16px",
+  color: "#475569",
+  fontSize: "clamp(12.5px, 2.4vw, 14px)",
+  lineHeight: 1.65,
+  textAlign: "center",
+  fontWeight: 600,
+};
+
+const roomAllocatedStyle = {
+  display: "flex",
+  alignItems: "center",
+  gap: 14,
+  padding: "15px 16px",
+  borderRadius: 16,
+  background: "linear-gradient(135deg,rgba(37,99,235,0.08),rgba(16,185,129,0.08))",
+  border: "1px solid rgba(59,130,246,0.16)",
+  marginBottom: 18,
+};
+
+const roomIconStyle = {
+  width: 44,
+  height: 44,
+  borderRadius: 13,
+  background: "#fff",
+  color: "#2563eb",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  boxShadow: "0 8px 22px rgba(15,23,42,0.07)",
+  flex: "0 0 auto",
+};
+
+const roomTitleStyle = {
+  margin: 0,
+  color: "#0f3b73",
+  fontSize: 15,
+  fontWeight: 800,
+  lineHeight: 1.3,
+};
+
+const roomTextStyle = {
+  margin: "4px 0 0",
+  color: "#64748b",
+  fontSize: 13,
+  lineHeight: 1.45,
+};
+
+const successCardStyle = {
+  background: "#fff",
+  border: "1px solid #e2e8f0",
+  borderRadius: 18,
+  padding: "clamp(16px, 2.4vw, 24px)",
+  boxShadow: "0 12px 30px rgba(15,23,42,0.06)",
+  marginTop: 18,
+};
+
+const sectionHeadingWrapStyle = {
+  display: "flex",
+  alignItems: "center",
+  gap: 12,
+  marginBottom: 18,
+};
+
+const sectionIconStyle = {
+  width: 42,
+  height: 42,
+  borderRadius: 13,
+  background: "#eff6ff",
+  color: "#2563eb",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  flex: "0 0 auto",
+};
+
+const sectionTitleStyle = {
+  margin: 0,
+  color: "#0f3b73",
+  fontSize: "clamp(17px, 2.7vw, 20px)",
+  lineHeight: 1.25,
+  fontWeight: 800,
+  letterSpacing: 0,
+};
+
+const sectionSubStyle = {
+  margin: "4px 0 0",
+  color: "#64748b",
+  fontSize: "clamp(11.5px, 2vw, 13px)",
+  lineHeight: 1.45,
+};
+
+const successDetailItemStyle = {
+  display: "flex",
+  alignItems: "flex-start",
+  gap: 10,
+  minWidth: 0,
+  padding: "13px 12px",
+  borderRadius: 14,
+  background: "#f8fafc",
+  border: "1px solid #eef2f7",
+};
+
+const successDetailIconStyle = {
+  width: 30,
+  height: 30,
+  borderRadius: 9,
+  background: "#fff",
+  color: "#2563eb",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  flex: "0 0 auto",
+  boxShadow: "0 4px 12px rgba(15,23,42,0.05)",
+};
+
+const successDetailLabelStyle = {
+  margin: 0,
+  color: "#64748b",
+  fontSize: "clamp(9.5px, 1.9vw, 11px)",
+  fontWeight: 700,
+  textTransform: "uppercase",
+  letterSpacing: "0.04em",
+  lineHeight: 1.35,
+};
+
+const successDetailValueStyle = {
+  margin: "5px 0 0",
+  color: "#111827",
+  fontSize: "clamp(12.5px, 2.2vw, 14.5px)",
+  fontWeight: 700,
+  lineHeight: 1.35,
+  overflowWrap: "anywhere",
+};
+
+const rentSummaryStyle = {
+  border: "1px solid #fed7aa",
+  borderRadius: 14,
+  overflow: "hidden",
+  background: "#fffaf5",
+  marginBottom: 16,
+};
+
+const rentSummaryCellStyle = {
+  padding: "14px 16px",
+  display: "flex",
+  flexDirection: "column",
+  gap: 6,
+};
+
+const rentSummaryLabelStyle = {
+  color: "#78716c",
+  fontSize: 12,
+  fontWeight: 700,
+};
+
+const rentSummaryValueStyle = {
+  color: "#1f2937",
+  fontSize: 16,
+  lineHeight: 1.3,
+};
+
+const rentAmountStyle = {
+  color: "#ea580c",
+  fontSize: 24,
+  lineHeight: 1.15,
+  fontWeight: 800,
+};
+
+const duesBreakdownStyle = {
+  border: "1px solid #dbeafe",
+  background: "#f8fbff",
+  borderRadius: 14,
+  overflow: "hidden",
+  marginBottom: 16,
+};
+
+const duesBreakdownTitleStyle = {
+  margin: 0,
+  padding: "11px 14px",
+  color: "#475569",
+  fontSize: 13,
+  fontWeight: 800,
+  borderBottom: "1px solid #dbeafe",
+};
+
+const duesListStyle = {
+  maxHeight: 260,
+  overflowY: "auto",
+};
+
+const duesRowStyle = {
+  display: "flex",
+  justifyContent: "space-between",
+  gap: 12,
+  padding: "11px 14px",
+  color: "#334155",
+  fontSize: 14,
+  borderBottom: "1px solid #eaf2ff",
+};
+
+const rentWarningStyle = {
+  display: "flex",
+  alignItems: "flex-start",
+  gap: 12,
+  padding: "14px 16px",
+  borderRadius: 14,
+  background: "#fffbeb",
+  border: "1px solid #fde68a",
+  color: "#334155",
+  fontSize: 14,
+  lineHeight: 1.65,
+};
+
+const thankYouStyle = {
+  margin: "20px 0 0",
+  color: "#16a34a",
+  textAlign: "center",
+  fontSize: 15,
+  fontWeight: 800,
+};
+
 const chevron = {
   position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)",
   pointerEvents: "none", color: "#94a3b8", fontSize: 14,
