@@ -33,6 +33,7 @@ import AutoMailSettings from "./pages/Automailsettings.jsx";
 import MasterAutomailSettings from "./pages/master/MasterAutomailSettings.jsx";
 import PublicTenantRentDetails from "./pages/PublicTenantRentDetails.jsx";
 import PaymentRequests from "./pages/PaymentRequests.jsx";
+import PrivacyPolicy from "./pages/PrivacyPolicy.jsx";
 
 const HOME_SEO = {
   title: "NILAYAM Hostel Management Software | Hostel & PG Management",
@@ -50,6 +51,15 @@ const NOINDEX_SEO = {
   robots: "noindex, nofollow",
 };
 
+const PRIVACY_POLICY_SEO = {
+  title: "Privacy Policy | NILAYAM",
+  description:
+    "Read the NILAYAM Privacy Policy for hostel and PG management services, including how account, tenant, rent, document and notification information may be handled.",
+  canonical: "https://nilayamhostelmanagement.in.net/privacy-policy",
+  robots: "index, follow",
+  siteName: "NILAYAM",
+};
+
 function setMeta(name, content, attr = "name") {
   let tag = document.head.querySelector(`meta[${attr}="${name}"]`);
   if (!tag) {
@@ -64,7 +74,12 @@ function RouteSeo() {
   const { pathname } = useLocation();
 
   useEffect(() => {
-    const seo = pathname === "/" ? HOME_SEO : NOINDEX_SEO;
+    const seo =
+      pathname === "/"
+        ? HOME_SEO
+        : pathname === "/privacy-policy"
+          ? PRIVACY_POLICY_SEO
+          : NOINDEX_SEO;
     document.title = seo.title;
     setMeta("description", seo.description);
     setMeta("robots", seo.robots);
@@ -119,6 +134,7 @@ export default function App() {
       {/* Owner shares: http://yourapp/tenant-register/<JWT>               */}
       <Route path="/tenant-register/:token" element={<TenantOnboardingForm />} />
       <Route path="/tenant/rent/:secureId" element={<PublicTenantRentDetails />} />
+      <Route path="/privacy-policy" element={<PrivacyPolicy />} />
 
       {/* ── Regular user routes wrapped in Layout ──────────────────────── */}
       <Route path="/dashboard" element={
