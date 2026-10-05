@@ -2,8 +2,9 @@
   "name": "backend",
   "version": "1.0.0",
   "description": "",
-  "main": "index.js",
+  "main": "server.js",
   "scripts": {
+    "start": "node server.js",
     "migrate:rent-payments": "node scripts/migrateRentPaymentsToTenantDocuments.js",
     "migrate:rent-payments:dry-run": "node scripts/migrateRentPaymentsToTenantDocuments.js --dry-run",
     "test": "echo \"Error: no test specified\" && exit 1"
@@ -26,6 +27,7 @@
     "multer-storage-cloudinary": "^4.0.0",
     "node-cron": "^4.2.1",
     "sharp": "^0.34.5",
-    "sweetalert2": "^11.26.24"
+    "sweetalert2": "^11.26.24",
+    "xlsx": "^0.18.5"
   }
 }

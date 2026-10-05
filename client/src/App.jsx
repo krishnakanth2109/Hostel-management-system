@@ -13,6 +13,7 @@ import Overview           from "./pages/Overview";
 import MasterDashboard    from "./pages/master/MasterDashboard";
 import MasterUsers        from "./pages/master/MasterUsers";
 
+
 // ── NEW: public tenant self-registration page ─────────────────────────────
 import TenantRegisterPage from "./pages/TenantRegisterPage.jsx";
 
@@ -31,6 +32,7 @@ import LandingPage from "./pages/Landingpage.jsx";
 import MasterPlanMonitor from "./pages/master/Masterplanmonitor.jsx";
 import AutoMailSettings from "./pages/Automailsettings.jsx";
 import MasterAutomailSettings from "./pages/master/MasterAutomailSettings.jsx";
+import MasterWhatsAppReminders from "./pages/master/MasterWhatsAppReminders.jsx";
 import PublicTenantRentDetails from "./pages/PublicTenantRentDetails.jsx";
 import PaymentRequests from "./pages/PaymentRequests.jsx";
 import PrivacyPolicy from "./pages/PrivacyPolicy.jsx";
@@ -175,6 +177,7 @@ export default function App() {
       <Route path="/master/users" element={
         <RequireMaster><MasterLayout><MasterUsers /></MasterLayout></RequireMaster>
       } />
+
           <Route path="/master/logins" element={
         <RequireMaster><MasterLayout><ManageLogins /></MasterLayout></RequireMaster>
       } />
@@ -189,6 +192,9 @@ export default function App() {
       } />
                   <Route path="/master/automail-settings" element={
         <RequireMaster><MasterLayout><MasterAutomailSettings /></MasterLayout></RequireMaster>
+      } />
+      <Route path="/master/whatsapp-reminders" element={
+        <RequireMaster><MasterLayout><MasterWhatsAppReminders /></MasterLayout></RequireMaster>
       } />
 
       {/* ── Fallback ───────────────────────────────────────────────────── */}

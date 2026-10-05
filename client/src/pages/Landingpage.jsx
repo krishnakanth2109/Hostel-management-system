@@ -10,7 +10,7 @@ import mobileApp3 from "../assets/mobileapp3.png";
 import { API } from "../api.js";
 import { useNavigate } from "react-router-dom";
 
-const APP_DOWNLOAD_URL = "https://drive.google.com/file/d/1ENS7y9i-ucrFNY5ySZ4LbkFTwEb9WzCm/view?usp=drivesdk";
+const APP_DOWNLOAD_URL = "https://play.google.com/store/apps/details?id=com.hostelappmanagementsystem";
 const MOBILE_APP_IMAGES = [mobileApp1, mobileApp2, mobileApp3];
 const NAV = [
   { label: "Home", href: "#home" },
@@ -217,7 +217,7 @@ export default function NilayamSite() {
           </nav>
 
           <div className="nav-cta">
-            <button className="btn btn-primary" onClick={() => scrollTo("#app")}>Download App</button>
+            <PlayStoreBadge compact />
             <button className="btn btn-outline" onClick={() => navigate("/login")}>Login</button>
           </div>
 
@@ -232,7 +232,7 @@ export default function NilayamSite() {
               {n.label}
             </a>
           ))}
-          <button className="btn btn-primary" onClick={() => scrollTo("#app")}>Download App</button>
+          <PlayStoreBadge compact />
           <button className="btn btn-outline" onClick={() => navigate("/login")}>Login</button>
         </div>
       </header>
@@ -263,7 +263,7 @@ export default function NilayamSite() {
             </p>
             <div className="cta-row">
               <button className="btn btn-primary lg" onClick={() => scrollTo("#pricing")}>Get Started</button>
-              <a className="btn btn-gold lg" href={APP_DOWNLOAD_URL} download>📱 Download App</a>
+              <PlayStoreBadge />
             </div>
           </div>
 
@@ -372,9 +372,7 @@ export default function NilayamSite() {
               mobile experience.
             </p>
             <div className="cta-row">
-              <a className="btn btn-gold lg" href={APP_DOWNLOAD_URL} download target="_blank" rel="noreferrer">
-                📱 Download NILAYAM App
-              </a>
+              <PlayStoreBadge />
         
             </div>
             <span className="android-tag">▲ Available for Android</span>
@@ -535,9 +533,7 @@ export default function NilayamSite() {
           <h2>Ready to Manage Your Hostel <span className="grad-gold">Smarter?</span></h2>
           <p>Join the smarter way to manage hostel operations with NILAYAM.</p>
           <div className="cta-row center">
-            <a className="btn btn-gold lg" href={APP_DOWNLOAD_URL} download target="_blank" rel="noreferrer">
-              📱 Download NILAYAM App
-            </a>
+            <PlayStoreBadge />
           </div>
         </div>
       </section>
@@ -593,7 +589,7 @@ export default function NilayamSite() {
           <div>
             <h5>Get NILAYAM</h5>
             <ul>
-              <li><a href={APP_DOWNLOAD_URL} download>📱 Download Android App</a></li>
+              <li><a href={APP_DOWNLOAD_URL} target="_blank" rel="noreferrer">Get it on Google Play</a></li>
               <li><a href="tel:9346178913">📞 +91 93461 78913</a></li>
               <li><a href="tel:9515174064">📞 +91 95151 74064</a></li>
             </ul>
@@ -631,6 +627,29 @@ function SectionHead({ kicker, title, sub, align = "center" }) {
       <h2 className="h2">{title}</h2>
       {sub && <p className="sec-sub">{sub}</p>}
     </div>
+  );
+}
+
+function PlayStoreBadge({ compact = false }) {
+  return (
+    <a
+      className={`play-store-badge ${compact ? "play-store-badge--compact" : ""}`}
+      href={APP_DOWNLOAD_URL}
+      target="_blank"
+      rel="noreferrer"
+      aria-label="Get NILAYAM on Google Play"
+    >
+      <svg className="play-store-icon" viewBox="0 0 48 52" aria-hidden="true">
+        <path fill="#00d7fe" d="M3.3 2.5C2.5 3.4 2 4.8 2 6.6v38.8c0 1.8.5 3.2 1.3 4.1l.2.2L27 26.3v-.6L3.5 2.3l-.2.2z" />
+        <path fill="#ffce00" d="M34.8 34.2 27 26.3v-.6l7.8-7.9.2.1 9.3 5.3c2.7 1.5 2.7 4 0 5.6L35 34.1l-.2.1z" />
+        <path fill="#ff3a44" d="M35 34.1 27 26 3.3 49.5c1.3 1.4 3.4 1.6 5.8.2L35 34.1z" />
+        <path fill="#00f076" d="M35 17.9 9.1 2.3C6.7.9 4.6 1.1 3.3 2.5L27 26l8-8.1z" />
+      </svg>
+      <span className="play-store-copy">
+        <small>GET IT ON</small>
+        <strong>Google Play</strong>
+      </span>
+    </a>
   );
 }
 
@@ -834,6 +853,17 @@ const CSS = `
 .btn-ghost:hover{background:rgba(15,42,90,.12)}
 .btn-gold{background:linear-gradient(135deg,var(--gold),var(--gold-2));color:#3d2c07;box-shadow:0 10px 28px -8px rgba(217,173,74,.55)}
 .btn-gold:hover{transform:translateY(-2px);box-shadow:0 18px 40px -8px rgba(217,173,74,.75)}
+.play-store-badge{display:inline-flex!important;align-items:center;gap:12px;min-width:190px;height:60px;padding:8px 17px 8px 13px;border:1px solid rgba(255,255,255,.38);border-radius:10px;background:#050505!important;color:#fff!important;box-shadow:0 12px 28px -10px rgba(0,0,0,.55);transition:transform .22s ease,box-shadow .22s ease,border-color .22s ease}
+.play-store-badge:hover{transform:translateY(-2px);border-color:rgba(255,255,255,.7);box-shadow:0 18px 36px -12px rgba(0,0,0,.7)}
+.play-store-badge:focus-visible{outline:3px solid rgba(90,168,255,.75);outline-offset:3px}
+.play-store-icon{width:34px;height:38px;flex:0 0 auto;display:block}
+.play-store-copy{display:flex;flex-direction:column;align-items:flex-start;line-height:1;color:#fff}
+.play-store-copy small{font-family:Arial,sans-serif;font-size:10px;font-weight:500;letter-spacing:.9px;margin-bottom:3px}
+.play-store-copy strong{font-family:Arial,sans-serif;font-size:22px;font-weight:500;letter-spacing:-.6px;white-space:nowrap}
+.play-store-badge--compact{min-width:145px;height:44px;gap:8px;padding:6px 11px 6px 9px;border-radius:8px}
+.play-store-badge--compact .play-store-icon{width:24px;height:28px}
+.play-store-badge--compact .play-store-copy small{font-size:7px;letter-spacing:.7px;margin-bottom:2px}
+.play-store-badge--compact .play-store-copy strong{font-size:16px;letter-spacing:-.35px}
 .btn-outline{background:transparent;color:var(--navy);border:1.5px solid var(--navy)}
 .btn-outline:hover{background:var(--navy);color:#fff}
 .btn-outline-light{background:transparent;color:#fff;border:1.5px solid rgba(255,255,255,.55)}
@@ -1175,6 +1205,7 @@ const CSS = `
   .p-lg{padding:24px}
   .cta-row{flex-direction:column;align-items:stretch}
   .btn{width:100%}
+  .play-store-badge{width:100%;justify-content:center}
   .link-btn{width:auto;align-self:center}
   .dash{padding:14px}
   .dash-kpis{grid-template-columns:1fr 1fr;gap:8px}

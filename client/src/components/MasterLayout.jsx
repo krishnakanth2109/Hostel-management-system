@@ -8,6 +8,8 @@ const Icons = {
   Users: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>,
   Logins: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>,
   Mail: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"></rect><path d="m3 7 9 6 9-6"></path><path d="M18 14v4"></path><path d="M16 16h4"></path></svg>,
+  WhatsApp: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-9 8.5 9.5 9.5 0 0 1-4-.9L3 21l1.7-4.6A8.5 8.5 0 1 1 21 11.5Z"></path><path d="M8.2 8.1c.2 3.2 2.5 5.5 5.7 5.7"></path><path d="m13.7 11.9 1.6.8"></path></svg>,
+  Import: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3v12"></path><path d="m7 10 5 5 5-5"></path><path d="M5 21h14"></path></svg>,
   Menu: () => <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>,
   Close: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>,
   ChevronLeft: () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>,
@@ -17,11 +19,14 @@ const Icons = {
 const NAV = [
   { to: "/master/dashboard", label: "Overview", icon: <Icons.Overview /> },
   { to: "/master/users",     label: "Users",    icon: <Icons.Users />    },
+  { to: "/master/import-data", label: "Import Data", icon: <Icons.Import /> },
+  { to: "/master/import-pending-rent", label: "Import Pending Rent", icon: <Icons.Import /> },
   { to: "/master/logins",    label: "Logins",   icon: <Icons.Logins />   },
   { to: "/master/plan-settings", label: "Plan Settings", icon: <Icons.Overview /> },
   { to: "/master/approvals", label: "Approvals", icon: <Icons.Overview /> },
   { to: "/master/plan-monitor", label: "Plan Monitor", icon: <Icons.Overview /> },
   { to: "/master/automail-settings", label: "Auto Email Setup", icon: <Icons.Mail /> },
+  { to: "/master/whatsapp-reminders", label: "WhatsApp Reminders Setup", icon: <Icons.WhatsApp /> },
 ];
 
 export default function MasterLayout({ children }) {

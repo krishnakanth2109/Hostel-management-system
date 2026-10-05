@@ -19,11 +19,14 @@ import approvalRoutes from "./routes/approvalroutes.js";
 import pushTokenRoutes from "./routes/pushTokenRoutes.js";
 import publicTenantRoutes from "./routes/publicTenantRoutes.js";
 import paymentRequestRoutes from "./routes/paymentRequestRoutes.js";
+import whatsappRoutes from "./routes/whatsappRoutes.js";
+import masterWhatsAppReminderRoutes from "./routes/masterWhatsAppReminderRoutes.js";
 import path from "path";
 import { fileURLToPath } from "url";
 import autoMailRouter, { initAllCronJobs } from "./routes/Automailroutes.js";
 import { initFirebase } from "./config/firebase.js";
 import { backfillTenantSecureIds } from "./utils/tenantSecureId.js";
+import { initializeWhatsAppReminderAutomation } from "./utils/whatsappReminderAutomation.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname  = path.dirname(__filename);
@@ -61,6 +64,10 @@ app.use(
   })
 );
 
+// Temporary WhatsApp integration routes. Keep before all application routes/fallbacks.
+app.use("/api/whatsapp", whatsappRoutes);
+app.use("/api/master/whatsapp-reminders", masterWhatsAppReminderRoutes);
+
 // ── Health Check ──────────────────────────────────────────────────────────────
 app.get("/", (req, res) => {
   res.status(200).json({ message: "Backend API is successfully running!" });
@@ -81,6 +88,9 @@ mongoose.connection.once("open", () => {
     console.error("[TenantSecureId] Backfill failed:", err.message);
   });
   initAllCronJobs();
+  initializeWhatsAppReminderAutomation().catch((err) => {
+    console.error("[WhatsAppReminder] Automation initialization failed:", err.message);
+  });
 });
 
 // ── Helper: compute expiry date ───────────────────────────────────────────────
@@ -617,4 +627,8 @@ app.use("/api/payment-requests", paymentRequestRoutes);
 initFirebase();
 
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log(`🚀 Server on port ${PORT}`));
+app.listen(PORT, () => {
+  console.log(`🚀 Server on port ${PORT}`);
+  console.log(`✅ WhatsApp route registered: POST http://localhost:${PORT}/api/whatsapp/test-rent-reminder`);
+  console.log(`✅ WhatsApp automation trigger: POST http://localhost:${PORT}/api/whatsapp/process-rent-reminders`);
+});

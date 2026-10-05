@@ -11,6 +11,8 @@ const userSchema = new mongoose.Schema(
     address:     { type: String, required: true },
     role:        { type: String, enum: ["user", "master"], default: "user" },
     loginStatus: { type: String, enum: ["active", "blocked", "pending"], default: "active" },
+    // Master-controlled opt-in. False is the safe default for existing and new owners.
+    whatsappRemindersEnabled: { type: Boolean, default: false },
 
     // ── Permanent onboarding short code ───────────────────────────────────────
     // One fixed, never-expiring short code per owner, used to build a clean
@@ -68,5 +70,6 @@ const userSchema = new mongoose.Schema(
 
 userSchema.index({ role: 1, createdAt: -1 });
 userSchema.index({ role: 1, loginStatus: 1, createdAt: -1 });
+userSchema.index({ role: 1, loginStatus: 1, whatsappRemindersEnabled: 1 });
 
 export default mongoose.model("User", userSchema);
