@@ -9,6 +9,7 @@ const PaymentEntrySchema = new mongoose.Schema({
 const MonthlyPaymentSchema = new mongoose.Schema({
   monthYear: { type: String, required: true },
   dueDate: { type: Date, required: true },
+  generatedDueAt: { type: Date },
   rentAmount: { type: Number, required: true },
   paidAmount: { type: Number, default: 0 },
   status: {

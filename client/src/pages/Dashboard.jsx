@@ -70,8 +70,9 @@ const locationLabel = (item) => {
 const buildRentMessage = (item, selectedMonth) => {
   const tenant = item?.tenant || {};
   const remaining = item?.remaining || 0;
+  const status = item?.isUpcoming ? "Upcoming" : item?.record?.status || "Due";
   return encodeURIComponent(
-    `Hello ${tenant.name || "there"}, your rent status for ${monthLabel(selectedMonth)} is ${item?.record?.status || "Due"}. Pending amount: ${fmt(remaining)}. Location: ${locationLabel(item)}.`
+    `Hello ${tenant.name || "there"}, your rent status for ${monthLabel(selectedMonth)} is ${status}. ${item?.isUpcoming ? "Upcoming balance" : "Pending amount"}: ${fmt(remaining)}. Location: ${locationLabel(item)}.`
   );
 };
 
@@ -179,11 +180,13 @@ function RevenueDetailsModal({ open, onClose, data, selectedMonth }) {
   const groups = [
     { key: "Due", title: "Due", tone: "red", empty: "No full dues for this month." },
     { key: "Partial", title: "Partial", tone: "amber", empty: "No partial payments for this month." },
+    { key: "Upcoming", title: "Upcoming", tone: "blue", empty: "No upcoming rent for this month." },
     { key: "Paid", title: "Paid", tone: "emerald", empty: "No fully paid tenants for this month." },
   ];
   const toneClasses = {
     red: "bg-red-50 text-red-700 border-red-100",
     amber: "bg-amber-50 text-amber-700 border-amber-100",
+    blue: "bg-blue-50 text-blue-700 border-blue-100",
     emerald: "bg-emerald-50 text-emerald-700 border-emerald-100",
   };
 
@@ -201,7 +204,7 @@ function RevenueDetailsModal({ open, onClose, data, selectedMonth }) {
         </div>
 
         <div className="overflow-y-auto p-4 sm:p-6 space-y-5">
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
             <div className="rounded-xl border border-gray-100 bg-gray-50 p-4">
               <p className="text-xs text-gray-500 font-semibold">Total Revenue</p>
               <p className="text-2xl font-black text-gray-900 mt-1">{fmt(summary.totalRevenue)}</p>
@@ -214,11 +217,15 @@ function RevenueDetailsModal({ open, onClose, data, selectedMonth }) {
               <p className="text-xs text-red-700 font-semibold">Pending</p>
               <p className="text-2xl font-black text-red-700 mt-1">{fmt(summary.pendingRevenue)}</p>
             </div>
+            <div className="rounded-xl border border-blue-100 bg-blue-50 p-4">
+              <p className="text-xs text-blue-700 font-semibold">Upcoming</p>
+              <p className="text-2xl font-black text-blue-700 mt-1">{fmt(summary.upcomingRevenue)}</p>
+            </div>
           </div>
 
           <div className="space-y-4">
             {groups.map((group) => {
-              const rows = tenants.filter((item) => (item.record?.status || "Due") === group.key);
+              const rows = tenants.filter((item) => (item.isUpcoming ? "Upcoming" : item.record?.status || "Due") === group.key);
               return (
                 <section key={group.key} className="border border-gray-100 rounded-2xl overflow-hidden">
                   <div className="px-4 py-3 bg-gray-50 flex items-center justify-between">
@@ -239,7 +246,7 @@ function RevenueDetailsModal({ open, onClose, data, selectedMonth }) {
                         return (
                           <div key={`${item.tenant?._id}-${group.key}`} className="px-4 py-3 flex flex-col lg:flex-row lg:items-center gap-3">
                             <div className="flex items-center gap-3 flex-1 min-w-0">
-                              <Avatar name={item.tenant?.name} size="md" color={group.key === "Paid" ? "#10b981" : group.key === "Partial" ? "#f59e0b" : "#ef4444"} />
+                              <Avatar name={item.tenant?.name} size="md" color={group.key === "Paid" ? "#10b981" : group.key === "Partial" ? "#f59e0b" : group.key === "Upcoming" ? "#3b82f6" : "#ef4444"} />
                               <div className="min-w-0">
                                 <p className="font-bold text-gray-900 truncate">{item.tenant?.name || "Candidate"}</p>
                                 <p className="text-xs text-gray-500 truncate">{locationLabel(item)}</p>
@@ -255,8 +262,8 @@ function RevenueDetailsModal({ open, onClose, data, selectedMonth }) {
                                 <p className="text-sm font-bold text-emerald-600">{fmt(item.record?.paidAmount)}</p>
                               </div>
                               <div className="text-left sm:text-right lg:w-28">
-                                <p className="text-[10px] uppercase text-gray-400 font-semibold">Due</p>
-                                <p className="text-sm font-bold text-red-600">{fmt(item.remaining)}</p>
+                                <p className="text-[10px] uppercase text-gray-400 font-semibold">{group.key === "Upcoming" ? "Upcoming" : "Due"}</p>
+                                <p className={`text-sm font-bold ${group.key === "Upcoming" ? "text-blue-600" : "text-red-600"}`}>{fmt(item.remaining)}</p>
                               </div>
                             </div>
                             <div className="flex items-center gap-2 lg:pl-2">
@@ -352,6 +359,7 @@ export default function Dashboard() {
   const paidCount      = revenueSummary.counts?.Paid || 0;
   const partialCount   = revenueSummary.counts?.Partial || 0;
   const dueCount       = revenueSummary.counts?.Due || 0;
+  const upcomingCount  = revenueSummary.counts?.Upcoming || 0;
   const revenueMonthOptions = monthOptions();
 
   const ownerName = owner?.owner || owner?.name || "Owner";
@@ -426,7 +434,7 @@ export default function Dashboard() {
                 <div className="h-3 bg-gray-100 rounded-full overflow-hidden mb-5">
                   <div className="h-full rounded-full bg-indigo-500" style={{ width: `${pct(collectedRev, totalRevenue)}%` }} />
                 </div>
-                <div className="grid grid-cols-3 gap-3">
+                <div className="grid grid-cols-4 gap-3">
                   <div className="bg-emerald-50 rounded-xl p-3 text-center">
                     <p className="text-xl font-extrabold text-emerald-600">{paidCount}</p>
                     <p className="text-xs text-gray-500 mt-0.5">Paid</p>
@@ -438,6 +446,10 @@ export default function Dashboard() {
                   <div className="bg-red-50 rounded-xl p-3 text-center">
                     <p className="text-xl font-extrabold text-red-600">{dueCount}</p>
                     <p className="text-xs text-gray-500 mt-0.5">Due</p>
+                  </div>
+                  <div className="bg-blue-50 rounded-xl p-3 text-center">
+                    <p className="text-xl font-extrabold text-blue-600">{upcomingCount}</p>
+                    <p className="text-xs text-gray-500 mt-0.5">Upcoming</p>
                   </div>
                 </div>
                 <div className="mt-4 pt-4 border-t border-gray-50 flex items-center justify-between text-xs font-semibold text-indigo-600">

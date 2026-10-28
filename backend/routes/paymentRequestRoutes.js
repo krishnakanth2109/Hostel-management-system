@@ -8,6 +8,7 @@ import { fileURLToPath } from "url";
 import { v2 as cloudinary } from "cloudinary";
 import Tenant from "../models/Tenant.js";
 import RentPayment from "../models/Rentpayment.js";
+import { ensureMonthlyRentDue } from "../services/rentDueGeneration.js";
 import PaymentRequest from "../models/PaymentRequest.js";
 import User from "../models/User.js";
 import { SECURE_TENANT_ID_RE } from "../utils/tenantSecureId.js";
@@ -294,15 +295,16 @@ router.patch("/:id/approve", auth, async (req, res) => {
     const snapshot = await getMonthSnapshot(tenant, request.monthYear);
     let record = snapshot.rentDoc.monthlyPayments.find((payment) => payment.monthYear === request.monthYear);
     if (!record) {
-      snapshot.rentDoc.monthlyPayments.push({
+      const parsed = parseMonthYear(request.monthYear);
+      const ensured = await ensureMonthlyRentDue(tenant, {
+        year: parsed.year,
+        month: parsed.month,
         monthYear: request.monthYear,
         dueDate: request.dueDate,
-        rentAmount: Number(request.rentAmount || tenant.rentAmount || 0),
-        paidAmount: 0,
-        status: "Due",
-        payments: [],
-      });
-      record = snapshot.rentDoc.monthlyPayments.find((payment) => payment.monthYear === request.monthYear);
+        rentAmount: request.rentAmount,
+      }, req.user.id);
+      snapshot.rentDoc = ensured.rentDoc;
+      record = ensured.record;
     }
 
     const actualPay = Math.min(Number(request.requestAmount || 0), Math.max(0, Number(record.rentAmount || 0) - Number(record.paidAmount || 0)));

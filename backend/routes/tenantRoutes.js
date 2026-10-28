@@ -18,6 +18,7 @@ import {
   CLOUDINARY_IMAGE_WIDTHS,
   withOptimizedTenantDocuments,
 } from "../utils/cloudinaryDelivery.js";
+import { generateFirstRentDueWithCatchUpFallback } from "../services/rentDueGeneration.js";
 
 const router = express.Router();
 
@@ -629,6 +630,7 @@ router.post("/register-via-link", upload.fields([{ name: "aadharFront", maxCount
           source: "onboarding-link", isVerified: false
         });
         await tenant.save();
+        await generateFirstRentDueWithCatchUpFallback(tenant);
 
         bed.status = "Occupied"; bed.tenantId = tenant._id;
         await building.save();
@@ -649,6 +651,7 @@ router.post("/register-via-link", upload.fields([{ name: "aadharFront", maxCount
         advanceAmount: advance, paidadvanceAmount: 0, documents, source: "onboarding-link", isVerified: false
       });
       await tenant.save();
+      await generateFirstRentDueWithCatchUpFallback(tenant);
       await logActivity(ownerId, "ONBOARD", "Tenant", `New registration: ${name} (Waiting for room)`);
 
       await notifyOwnerOnboarding(ownerId, tenant);
@@ -720,6 +723,7 @@ router.post("/", auth, upload.fields([{ name: "aadharFront" }, { name: "aadharBa
           owner: req.user.id, name: name.trim(), phone: phone.trim(), email, fatherName, fatherPhone, permanentAddress, joiningDate, rentAmount: Number(rentAmount), advanceAmount: advance, paidadvanceAmount: 0, documents, buildingId, floorId, roomId, bedId, allocationInfo
         });
         await tenant.save();
+        await generateFirstRentDueWithCatchUpFallback(tenant);
 
         bed.status = "Occupied"; bed.tenantId = tenant._id;
         await building.save();
@@ -734,6 +738,7 @@ router.post("/", auth, upload.fields([{ name: "aadharFront" }, { name: "aadharBa
 
       const tenant = new Tenant({ owner: req.user.id, name, phone, email, fatherName, fatherPhone, permanentAddress, joiningDate, rentAmount: Number(rentAmount), advanceAmount: advance, paidadvanceAmount: 0, documents });
       await tenant.save();
+      await generateFirstRentDueWithCatchUpFallback(tenant);
       await logActivity(req.user.id, "CREATE", "Tenant", `Added Tenant: ${name} (No Room Assigned)`);
       res.status(201).json({
         message: "Tenant added successfully.",

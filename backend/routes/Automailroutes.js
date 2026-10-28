@@ -9,6 +9,7 @@ import axios from "axios";
 
 import Tenant from "../models/Tenant.js";
 import RentPayment from "../models/Rentpayment.js";
+import { getRentDueTiming, splitRentDueAmounts } from "../utils/rentDueTiming.js";
 import AutoMailConfig from "../models/Automailconfig.js";
 import Building from "../models/Building.js";
 import User from "../models/User.js";
@@ -74,12 +75,6 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 function buildTenantRentLink(secureId) {
   const frontendUrl = (process.env.FRONTEND_URL || "http://localhost:5173").trim().replace(/^["']|["']$/g, "").replace(/\/$/, "");
   return `${frontendUrl}/tenant/rent/${secureId}`;
-}
-
-function isSameDay(d1, d2) {
-  return d1.getFullYear() === d2.getFullYear() &&
-         d1.getMonth() === d2.getMonth() &&
-         d1.getDate() === d2.getDate();
 }
 
 function getMins(timeStr) {
@@ -167,42 +162,23 @@ function getAllCyclesSinceJoining(joiningDate, now = new Date(), lookaheadMs = 0
   return cycles;
 }
 
-async function getOrCreateTenantRentDoc(tenant, ownerId) {
-  let rentDoc = await RentPayment.findOne({ tenantId: tenant._id });
-  if (rentDoc) return rentDoc;
-
-  try {
-    return await RentPayment.create({
-      owner: ownerId,
-      tenantId: tenant._id,
-      monthlyPayments: [],
-    });
-  } catch (err) {
-    if (err?.code === 11000) {
-      rentDoc = await RentPayment.findOne({ tenantId: tenant._id });
-      if (rentDoc) return rentDoc;
-    }
-    throw err;
-  }
-}
-
 function findMonthlyPayment(rentDoc, monthYear) {
   return rentDoc.monthlyPayments.find((payment) => payment.monthYear === monthYear);
 }
 
-function createMonthlyPayment(tenant, monthYear, dueDate) {
+function getRemainingAmount(record) {
+  return Math.max(0, Number(record.rentAmount || 0) - Number(record.paidAmount || 0));
+}
+
+function buildCalculatedMonthlyPayment(tenant, monthYear, dueDate) {
   return {
     monthYear,
     dueDate,
-    rentAmount: tenant.rentAmount,
+    rentAmount: Number(tenant.rentAmount || 0),
     paidAmount: 0,
     status: "Due",
     payments: [],
   };
-}
-
-function getRemainingAmount(record) {
-  return Math.max(0, Number(record.rentAmount || 0) - Number(record.paidAmount || 0));
 }
 
 function refreshPaymentStatus(record) {
@@ -230,7 +206,7 @@ function monthlyPaymentToObject(record, tenantId) {
   return { ...obj, tenantId };
 }
 
-async function buildTenantSummary(tenant, ownerId, lookaheadMs = 0) {
+async function buildTenantSummary(tenant, lookaheadMs = 0) {
   const now = new Date();
   const advanceAmount = Math.max(0, Number(tenant.advanceAmount || 0));
   const paidAdvanceAmount = Math.min(advanceAmount, Math.max(0, Number(tenant.paidadvanceAmount || 0)));
@@ -241,6 +217,7 @@ async function buildTenantSummary(tenant, ownerId, lookaheadMs = 0) {
     return {
       currentRecord: null, remaining: 0, pendingMonths: [], arrearsTotal: 0,
       totalAccumulatedDue: advancePending, hasPreviousPending: false, pendingMonthsCount: 0,
+      upcomingAmount: 0, isUpcoming: false,
       isOverdue: false, daysOverdue: null, daysUntilDue: null, dueDate: null,
       advanceAmount, paidAdvanceAmount, advancePending,
     };
@@ -248,7 +225,7 @@ async function buildTenantSummary(tenant, ownerId, lookaheadMs = 0) {
 
   const currentCycle = allCycles[allCycles.length - 1];
   const previousCycles = allCycles.slice(0, -1);
-  const rentDoc = await getOrCreateTenantRentDoc(tenant, ownerId);
+  const rentDoc = await RentPayment.findOne({ tenantId: tenant._id });
 
   const pendingMonths = [];
   let arrearsTotal = 0;
@@ -256,13 +233,12 @@ async function buildTenantSummary(tenant, ownerId, lookaheadMs = 0) {
 
   for (const { year, month, dueDate } of previousCycles) {
     const key = `${year}-${String(month + 1).padStart(2, "0")}`;
-    let record = findMonthlyPayment(rentDoc, key);
+    let record = rentDoc ? findMonthlyPayment(rentDoc, key) : null;
     if (!record) {
-      rentDoc.monthlyPayments.push(createMonthlyPayment(tenant, key, dueDate));
-      record = findMonthlyPayment(rentDoc, key);
-      didChange = true;
+      record = buildCalculatedMonthlyPayment(tenant, key, dueDate);
+    } else {
+      didChange = syncMonthlyPaymentRent(record, tenant) || didChange;
     }
-    didChange = syncMonthlyPaymentRent(record, tenant) || didChange;
     const remaining = getRemainingAmount(record);
     if (remaining > 0) {
       pendingMonths.push(monthlyPaymentToObject(record, tenant._id));
@@ -271,33 +247,37 @@ async function buildTenantSummary(tenant, ownerId, lookaheadMs = 0) {
   }
 
   const currentKey = `${currentCycle.year}-${String(currentCycle.month + 1).padStart(2, "0")}`;
-  let currentRecord = findMonthlyPayment(rentDoc, currentKey);
+  let currentRecord = rentDoc ? findMonthlyPayment(rentDoc, currentKey) : null;
   if (!currentRecord) {
-    rentDoc.monthlyPayments.push(createMonthlyPayment(tenant, currentKey, currentCycle.dueDate));
-    currentRecord = findMonthlyPayment(rentDoc, currentKey);
-    didChange = true;
+    currentRecord = buildCalculatedMonthlyPayment(tenant, currentKey, currentCycle.dueDate);
+  } else {
+    didChange = syncMonthlyPaymentRent(currentRecord, tenant) || didChange;
   }
-  didChange = syncMonthlyPaymentRent(currentRecord, tenant) || didChange;
 
-  if (didChange) await rentDoc.save();
+  if (didChange && rentDoc) await rentDoc.save();
 
   const currentRemaining = getRemainingAmount(currentRecord);
-  const msUntilDue = currentRecord.dueDate.getTime() - now.getTime();
-  const isOverdue = msUntilDue < 0;
-  const daysOverdue = isOverdue ? Math.ceil(Math.abs(msUntilDue) / 86400000) : null;
-  const daysUntilDue = !isOverdue ? Math.ceil(msUntilDue / 86400000) : null;
+  const dueTiming = getRentDueTiming(currentRecord.dueDate, now);
+  const dueAmounts = splitRentDueAmounts({
+    currentRemaining,
+    arrearsTotal,
+    advancePending,
+    isUpcoming: dueTiming.isUpcoming,
+  });
 
   return {
     currentRecord: monthlyPaymentToObject(currentRecord, tenant._id),
     remaining: currentRemaining,
     pendingMonths,
     arrearsTotal,
-    totalAccumulatedDue: arrearsTotal + currentRemaining + advancePending,
+    totalAccumulatedDue: dueAmounts.totalAccumulatedDue,
+    upcomingAmount: dueAmounts.upcomingAmount,
+    isUpcoming: dueTiming.isUpcoming,
     hasPreviousPending: pendingMonths.length > 0,
     pendingMonthsCount: pendingMonths.length,
-    isOverdue,
-    daysOverdue,
-    daysUntilDue,
+    isOverdue: dueTiming.isOverdue,
+    daysOverdue: dueTiming.daysOverdue,
+    daysUntilDue: dueTiming.daysUntilDue,
     dueDate: currentRecord.dueDate,
     advanceAmount, paidAdvanceAmount, advancePending,
   };
@@ -462,7 +442,7 @@ function buildRentDetailsCta(detailsLink) {
     </table>`;
 }
 
-function buildReminderEmail({ tenant, record, buildingDetails, isOverdue, daysOverdue, daysUntilDue, pendingMonths = [], arrearsTotal = 0, totalAccumulatedDue = 0, advancePending = 0, detailsLink = "" }) {
+function buildReminderEmail({ tenant, record, buildingDetails, isOverdue, daysOverdue, daysUntilDue, isUpcoming = false, pendingMonths = [], arrearsTotal = 0, totalAccumulatedDue = 0, advancePending = 0, detailsLink = "" }) {
   const remaining = record.rentAmount - record.paidAmount;
   const month = new Date(record.dueDate).toLocaleString("en-IN", { month: "short", year: "numeric" });
   const hasPreviousPending = pendingMonths.length > 0;
@@ -515,7 +495,7 @@ function buildReminderEmail({ tenant, record, buildingDetails, isOverdue, daysOv
         </tbody>
       </table>
     </div>` : "";
-  const rentOutstanding = arrearsTotal + remaining;
+  const rentOutstanding = arrearsTotal + (isUpcoming ? 0 : remaining);
   const totalsBreakdown = advancePending > 0
     ? `<div style="margin-top:8px;color:#718096;font-size:11px;">Rent outstanding ${fmtINR(rentOutstanding)} + Advance pending ${fmtINR(advancePending)} = Total ${fmtINR(totalAccumulatedDue)}</div>`
     : "";
@@ -615,17 +595,11 @@ async function runEmailJobForOwner(ownerId, targetType, force = false) {
     try {
       if (!tenant.email) continue;
 
-      const summary = await buildTenantSummary(tenant, ownerId, FIVE_DAYS_MS);
-      if (!summary || summary.totalAccumulatedDue <= 0) continue;
+      const summary = await buildTenantSummary(tenant, FIVE_DAYS_MS);
+      if (!summary || summary.totalAccumulatedDue + summary.upcomingAmount <= 0) continue;
 
-      const rentOutstanding = summary.arrearsTotal + summary.remaining;
+      const rentOutstanding = summary.arrearsTotal + (summary.isUpcoming ? 0 : summary.remaining);
       const advanceOnlyDue = summary.advancePending > 0 && rentOutstanding <= 0;
-      const isDueToday = summary.currentRecord?.dueDate && isSameDay(new Date(summary.currentRecord.dueDate), new Date());
-      if (isDueToday) {
-        summary.isOverdue = false;
-        summary.daysOverdue = null;
-        summary.daysUntilDue = 0;
-      }
 
       let dueType = null;
       if (advanceOnlyDue) {

@@ -128,7 +128,9 @@ if (hasPreviousPending) {
     const pmMonth = new Date(pm.dueDate).toLocaleString("en-IN", { month: "long", year: "numeric" });
     message += `${pmMonth}: ₹${pmRemaining.toLocaleString('en-IN')}\n`;
   });
-  message += `\n*Current Month (${month}):* ₹${remainingCurrent.toLocaleString('en-IN')}\n`;
+  message += daysUntilDue > 0
+    ? `\n*Upcoming Rent (${month}):* ₹${remainingCurrent.toLocaleString('en-IN')}\n`
+    : `\n*Current Month (${month}):* ₹${remainingCurrent.toLocaleString('en-IN')}\n`;
   message += `━━━━━━━━━━━━━━━━━━━━\n`;
   message += `*TOTAL DUE:* ₹${totalAccumulatedDue.toLocaleString('en-IN')}\n`;
   message += `━━━━━━━━━━━━━━━━━━━━\n\n`;
@@ -347,7 +349,11 @@ function BillPreviewModal({ item, onClose }) {
       caption += `📋 Your rent bill image for *${month}* is attached.\n\n`;
     }
 
-    caption += `💰 *Total Due: ${fmt(item.totalAccumulatedDue)}*\n\n`;
+    caption += `💰 *Total Due: ${fmt(item.totalAccumulatedDue)}*\n`;
+    if (item.isUpcoming && item.upcomingAmount > 0) {
+      caption += `📅 *Upcoming Rent: ${fmt(item.upcomingAmount)}*\n`;
+    }
+    caption += `\n`;
     caption += `Please complete your payment at the earliest.\n`;
     caption += `📌 See all due details in the image above.\n\n`;
     caption += `_Hostel Management_`;
@@ -540,7 +546,7 @@ function BillPreviewModal({ item, onClose }) {
 
 // ─── Due Card ─────────────────────────────────────────────────────────────────
 function DueCard({ item, onSelect, onPayNow }) {
-  const { tenant, record, remaining, isOverdue, daysOverdue, daysUntilDue, pendingMonths, totalAccumulatedDue, hasPreviousPending, pendingMonthsCount } = item;
+  const { tenant, record, remaining, isOverdue, daysOverdue, daysUntilDue, isUpcoming, upcomingAmount = 0, pendingMonths, totalAccumulatedDue, hasPreviousPending, pendingMonthsCount } = item;
   const alloc = tenant.allocationInfo || {};
   const phone = tenant.phone?.replace(/\D/g, "");
   const passportPhoto = tenant.documents?.passportPhoto;
@@ -554,6 +560,8 @@ function DueCard({ item, onSelect, onPayNow }) {
     ? [...payable, { type: "advance", monthYear: null, key: "advance", maxAmount: advancePending, label: "Advance Amount" }]
     : payable;
   const displayTotalDue = Number(totalAccumulatedDue || 0) + (item.advancePending == null ? advancePending : 0);
+  const displayPrimaryAmount = displayTotalDue > 0 ? displayTotalDue : upcomingAmount;
+  const displayPrimaryLabel = displayTotalDue > 0 ? "Total Accumulated Due" : isUpcoming ? "Upcoming Rent" : "Total Accumulated Due";
   const [showProfilePopup, setShowProfilePopup] = useState(false);
   const [showBillModal, setShowBillModal] = useState(false);
 
@@ -633,8 +641,11 @@ const handleWA = (e) => {
 
           <div className="flex items-end justify-between">
             <div>
-              <p className="text-gray-400 text-[11px] uppercase tracking-wide">Total Accumulated Due</p>
-              <p className={`text-2xl font-black ${hasPreviousPending ? "text-rose-600" : "text-gray-900"}`}>{fmt(displayTotalDue)}</p>
+              <p className="text-gray-400 text-[11px] uppercase tracking-wide">{displayPrimaryLabel}</p>
+              <p className={`text-2xl font-black ${hasPreviousPending ? "text-rose-600" : "text-gray-900"}`}>{fmt(displayPrimaryAmount)}</p>
+              {displayTotalDue > 0 && isUpcoming && upcomingAmount > 0 && (
+                <p className="text-amber-600 text-[10px] font-semibold">Upcoming rent: {fmt(upcomingAmount)}</p>
+              )}
             </div>
             <div className="text-right">
               {advanceOnly
@@ -914,7 +925,7 @@ function TenantDetailModal({ tenantId, onClose, onPayNow, onPaymentDone, onTenan
 
   if (!data && !loading) return null;
 
-  const { tenant, buildingDetails, currentRecord, remaining, history, pendingMonths, arrearsTotal, totalAccumulatedDue, hasPreviousPending, pendingMonthsCount, advancePending = 0, isOverdue, daysOverdue, daysUntilDue } = data || {};
+  const { tenant, buildingDetails, currentRecord, remaining, history, pendingMonths, arrearsTotal, totalAccumulatedDue, upcomingAmount = 0, isUpcoming, hasPreviousPending, pendingMonthsCount, advancePending = 0, isOverdue, daysOverdue, daysUntilDue } = data || {};
   const phone = tenant?.phone?.replace(/\D/g, "");
   const payable = buildPayable(pendingMonths, currentRecord, remaining, advancePending);
   const passportPhoto = tenant?.documents?.passportPhoto;
@@ -1025,6 +1036,7 @@ function TenantDetailModal({ tenantId, onClose, onPayNow, onPaymentDone, onTenan
                 <div className="text-right shrink-0 hidden sm:block">
                   <p className="text-gray-400 text-[10px] uppercase font-semibold mb-1">Grand Total Due</p>
                   <p className="text-xl font-black text-gray-900">{fmt(totalAccumulatedDue)}</p>
+                  {isUpcoming && upcomingAmount > 0 && <p className="text-amber-600 text-[10px] font-semibold">Upcoming: {fmt(upcomingAmount)}</p>}
                 </div>
               </div>
               
@@ -1032,6 +1044,7 @@ function TenantDetailModal({ tenantId, onClose, onPayNow, onPaymentDone, onTenan
                 <div>
                   <p className="text-gray-500 text-[10px] uppercase font-semibold">Grand Total Due</p>
                   <p className="text-lg font-black text-gray-900">{fmt(totalAccumulatedDue)}</p>
+                  {isUpcoming && upcomingAmount > 0 && <p className="text-amber-600 text-[10px] font-semibold">Upcoming: {fmt(upcomingAmount)}</p>}
                 </div>
                 <div className="text-amber-500 text-2xl">💰</div>
               </div>

@@ -363,7 +363,7 @@ function CandidateDetailModal({ tenantId, onClose, onCandidateUpdated }) {
 
   if (!data && !loading) return null;
 
-  const { tenant, buildingDetails, currentRecord, remaining, history, pendingMonths, arrearsTotal, totalAccumulatedDue, hasPreviousPending, pendingMonthsCount, advancePending = 0 } = data || {};
+  const { tenant, buildingDetails, currentRecord, remaining, history, pendingMonths, arrearsTotal, totalAccumulatedDue, upcomingAmount = 0, isUpcoming, hasPreviousPending, pendingMonthsCount, advancePending = 0 } = data || {};
   const phone        = tenant?.phone?.replace(/\D/g, "");
   const passportPhoto = tenant?.documents?.passportPhoto;
   const advanceAmount = Number(tenant?.advanceAmount || 0);
@@ -488,8 +488,8 @@ function CandidateDetailModal({ tenantId, onClose, onCandidateUpdated }) {
                       </div>
                     </div>
                     <div className="text-right shrink-0 hidden sm:block">
-                      <p className="text-gray-400 text-[10px] uppercase font-semibold mb-1">Total Due</p>
-                      <p className="text-xl font-black text-gray-900">{fmt(totalAccumulatedDue || 0)}</p>
+                      <p className="text-gray-400 text-[10px] uppercase font-semibold mb-1">{totalAccumulatedDue > 0 ? "Total Due" : isUpcoming ? "Upcoming Rent" : "Total Due"}</p>
+                      <p className="text-xl font-black text-gray-900">{fmt(totalAccumulatedDue > 0 ? totalAccumulatedDue : upcomingAmount)}</p>
                     </div>
                   </div>
                 )}
@@ -839,10 +839,10 @@ function CandidateCard({ tenant, rentInfo, onViewMore, onPhotoClick }) {
               <p className="text-[10px] uppercase tracking-wide font-semibold text-gray-400">Rent Status</p>
               <div className="mt-0.5"><RentStatusBadge rentInfo={rentInfo} /></div>
             </div>
-            {rentInfo.totalAccumulatedDue > 0 && (
+            {(rentInfo.totalAccumulatedDue > 0 || rentInfo.upcomingAmount > 0) && (
               <div className="text-right">
-                <p className="text-[10px] uppercase tracking-wide font-semibold text-gray-400">Due</p>
-                <p className="text-rose-600 font-bold text-sm">{fmt(rentInfo.totalAccumulatedDue)}</p>
+                <p className="text-[10px] uppercase tracking-wide font-semibold text-gray-400">{rentInfo.totalAccumulatedDue > 0 ? "Due" : "Upcoming"}</p>
+                <p className={`${rentInfo.totalAccumulatedDue > 0 ? "text-rose-600" : "text-amber-600"} font-bold text-sm`}>{fmt(rentInfo.totalAccumulatedDue > 0 ? rentInfo.totalAccumulatedDue : rentInfo.upcomingAmount)}</p>
               </div>
             )}
           </div>
@@ -896,7 +896,7 @@ function Toast({ msg, onDone }) {
 // ─── Rent Status Badge ────────────────────────────────────────────────────────
 function RentStatusBadge({ rentInfo, size = "sm" }) {
   if (!rentInfo) return <span className="text-gray-300 text-xs">—</span>;
-  const { hasPreviousPending, currentRecord } = rentInfo;
+  const { hasPreviousPending, currentRecord, isUpcoming, upcomingAmount = 0 } = rentInfo;
   const curStatus = currentRecord?.status || "Due";
 
   if (hasPreviousPending) {
@@ -909,6 +909,9 @@ function RentStatusBadge({ rentInfo, size = "sm" }) {
         Overdue
       </span>
     );
+  }
+  if (isUpcoming && upcomingAmount > 0) {
+    return <span className="px-2 py-0.5 rounded-full text-xs font-bold border border-amber-200 bg-amber-50 text-amber-700">Upcoming</span>;
   }
   if (curStatus === "Paid") {
     return <span className="px-2 py-0.5 rounded-full text-xs font-bold border border-emerald-200 bg-emerald-100 text-emerald-700">✓ Paid</span>;
@@ -923,17 +926,23 @@ function RentStatusBadge({ rentInfo, size = "sm" }) {
 // ─── Arrears Summary cell ─────────────────────────────────────────────────────
 function ArrearCell({ rentInfo }) {
   if (!rentInfo) return <span className="text-gray-300 text-xs">—</span>;
-  const { hasPreviousPending, arrearsTotal, totalAccumulatedDue, currentRecord } = rentInfo;
+  const { hasPreviousPending, arrearsTotal, totalAccumulatedDue, currentRecord, isUpcoming, upcomingAmount = 0 } = rentInfo;
   const curStatus = currentRecord?.status || "Due";
   const remaining = (currentRecord?.rentAmount || 0) - (currentRecord?.paidAmount || 0);
   if (!hasPreviousPending && curStatus === "Paid") {
     return <span className="text-emerald-500 text-xs font-semibold">Clear</span>;
+  }
+  if (!hasPreviousPending && isUpcoming && totalAccumulatedDue <= 0) {
+    return <span className="text-amber-600 text-xs font-semibold">Upcoming: {fmt(upcomingAmount)}</span>;
   }
   return (
     <div>
       <p className="text-rose-600 font-bold text-sm">{fmt(totalAccumulatedDue)}</p>
       {hasPreviousPending && (
         <p className="text-rose-400 text-[10px] mt-0.5">Arrears: {fmt(arrearsTotal)}</p>
+      )}
+      {isUpcoming && upcomingAmount > 0 && (
+        <p className="text-amber-500 text-[10px] mt-0.5">Upcoming: {fmt(upcomingAmount)}</p>
       )}
     </div>
   );

@@ -111,6 +111,8 @@ export default function RentDueCardImage({ item, cardRef }) {
     daysUntilDue,
     pendingMonths = [],
     totalAccumulatedDue,
+    upcomingAmount = 0,
+    isUpcoming,
     hasPreviousPending,
   } = item;
 
@@ -611,8 +613,8 @@ export default function RentDueCardImage({ item, cardRef }) {
         <div style={s.totalBlock}>
           <div style={s.totalBlockCircle} />
           <div>
-            <div style={s.totalLabel}>{t.totalLabel}</div>
-            <div style={s.totalAmount}>{fmt(totalAccumulatedDue)}</div>
+            <div style={s.totalLabel}>{totalAccumulatedDue > 0 ? t.totalLabel : isUpcoming ? "UPCOMING RENT" : t.totalLabel}</div>
+            <div style={s.totalAmount}>{fmt(totalAccumulatedDue > 0 ? totalAccumulatedDue : upcomingAmount)}</div>
           </div>
           {hasPreviousPending && (
             <div style={s.totalMonthsBadge}>

@@ -27,6 +27,7 @@ import autoMailRouter, { initAllCronJobs } from "./routes/Automailroutes.js";
 import { initFirebase } from "./config/firebase.js";
 import { backfillTenantSecureIds } from "./utils/tenantSecureId.js";
 import { initializeWhatsAppReminderAutomation } from "./utils/whatsappReminderAutomation.js";
+import { initializeRentDueScheduler } from "./services/rentDueGeneration.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname  = path.dirname(__filename);
@@ -88,6 +89,7 @@ mongoose.connection.once("open", () => {
     console.error("[TenantSecureId] Backfill failed:", err.message);
   });
   initAllCronJobs();
+  initializeRentDueScheduler();
   initializeWhatsAppReminderAutomation().catch((err) => {
     console.error("[WhatsAppReminder] Automation initialization failed:", err.message);
   });

@@ -208,9 +208,9 @@ export default function AutoMailSettings() {
       const adv = [];
 
       data.forEach((item) => {
-        if (!item || item.totalAccumulatedDue <= 0 || !item.tenant) return;
+        if (!item || Number(item.totalAccumulatedDue || 0) + Number(item.upcomingAmount || 0) <= 0 || !item.tenant) return;
         
-        const rentOutstanding = Number(item.arrearsTotal || 0) + Number(item.remaining || 0);
+        const rentOutstanding = Number(item.arrearsTotal || 0) + (item.isUpcoming ? 0 : Number(item.remaining || 0));
         const advanceOnlyDue = Number(item.advancePending || 0) > 0 && rentOutstanding <= 0;
         if (advanceOnlyDue) {
           adv.push(item.tenant);
