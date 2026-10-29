@@ -23,6 +23,7 @@ import {
   IndianRupee,
   Mail,
   Phone,
+  ShieldCheck,
   User,
 } from "lucide-react";
 import { API } from "../api.js";
@@ -41,6 +42,19 @@ const INIT = {
   rentAmount: "",
   advanceAmount: "",
 };
+
+const HOSTEL_RULES = [
+  { title: "Maintain Cleanliness", text: "Keep your room and common areas clean." },
+  { title: "Personal Belongings", text: "You are the only responsible for taking care of their own belongings, including mobile phones, laptops, money, and other personal items." },
+  { title: "Pay Rent on Time", text: "Pay your monthly rent before the due date." },
+  { title: "Maintain Silence", text: "Avoid loud noises, especially during night hours." },
+  { title: "No Smoking, Alcohol, or Drugs", text: "Smoking, alcohol consumption, and drug use are prohibited inside the hostel premises." },
+  { title: "Respect Others", text: "Treat fellow residents and hostel staff with respect." },
+  { title: "Protect Hostel Property", text: "Do not damage hostel property. Any damage caused must be compensated." },
+  { title: "Follow Safety Rules", text: "Keep shared spaces clear and follow hostel safety guidelines." },
+  { title: "No Illegal Activities", text: "Illegal activities are strictly prohibited within the hostel premises." },
+  { title: "Respect Privacy", text: "Respect other residents' privacy and do not use their belongings without permission." },
+];
 
 const formatINR = (value) =>
   new Intl.NumberFormat("en-IN", {
@@ -144,40 +158,40 @@ function FocusInput({ type = "text", placeholder, value, onChange, required, min
 
 /* ─── Step indicator ──────────────────────────────────────────────── */
 function StepBar({ step }) {
-  const steps = ["Personal Info", "Documents", "Room Allocation"];
+  const steps = ["Personal Info", "Documents", "Room Allocation", "Submit"];
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 0, marginBottom: 32 }}>
+    <div style={{ display: "grid", gridTemplateColumns: `repeat(${steps.length}, minmax(0, 1fr))`, marginBottom: 32 }}>
       {steps.map((s, i) => {
         const num = i + 1;
         const done = step > num;
         const active = step === num;
         return (
-          <div key={s} style={{ display: "flex", alignItems: "center", flex: 1 }}>
-            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", flex: "0 0 auto" }}>
-              <div style={{
-                width: 34, height: 34, borderRadius: "50%",
-                background: done ? "#10b981" : active ? "linear-gradient(135deg,#6366f1,#8b5cf6)" : "#e2e8f0",
-                color: done || active ? "#fff" : "#94a3b8",
-                display: "flex", alignItems: "center", justifyContent: "center",
-                fontSize: 13, fontWeight: 700,
-                boxShadow: active ? "0 4px 14px rgba(99,102,241,0.35)" : "none",
-                transition: "all 0.3s",
-              }}>
-                {done ? "✓" : num}
-              </div>
-              <span style={{
-                fontSize: 10, fontWeight: 600, marginTop: 5, letterSpacing: "0.03em",
-                color: active ? "#6366f1" : done ? "#10b981" : "#94a3b8",
-                whiteSpace: "nowrap",
-              }}>{s}</span>
-            </div>
+          <div key={s} style={{ position: "relative", display: "flex", flexDirection: "column", alignItems: "center", minWidth: 0 }}>
             {i < steps.length - 1 && (
               <div style={{
-                flex: 1, height: 2, margin: "0 4px", marginBottom: 18,
+                position: "absolute", top: 16, left: "calc(50% + 21px)",
+                width: "calc(100% - 42px)", height: 2,
                 background: done ? "#10b981" : "#e2e8f0",
                 transition: "background 0.3s",
               }} />
             )}
+            <div style={{
+              position: "relative", zIndex: 1,
+              width: 34, height: 34, borderRadius: "50%",
+              background: done ? "#10b981" : active ? "linear-gradient(135deg,#6366f1,#8b5cf6)" : "#e2e8f0",
+              color: done || active ? "#fff" : "#94a3b8",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              fontSize: 13, fontWeight: 700,
+              boxShadow: active ? "0 4px 14px rgba(99,102,241,0.35)" : "none",
+              transition: "all 0.3s",
+            }}>
+              {done ? "✓" : num}
+            </div>
+            <span style={{
+              fontSize: "clamp(8px,2vw,10px)", fontWeight: 600, marginTop: 5, letterSpacing: "0.03em",
+              color: active ? "#6366f1" : done ? "#10b981" : "#94a3b8",
+              whiteSpace: "nowrap", textAlign: "center",
+            }}>{s}</span>
           </div>
         );
       })}
@@ -250,6 +264,7 @@ export default function TenantOnboardingForm() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [successMsg, setSuccessMsg] = useState("");
+  const [rulesAccepted, setRulesAccepted] = useState(false);
 
   const [floors, setFloors] = useState([]);
   const [rooms, setRooms] = useState([]);
@@ -292,6 +307,12 @@ export default function TenantOnboardingForm() {
       })
       .catch(() => setPageStatus("invalid"));
   }, [token]);
+
+  useEffect(() => {
+    if (pageStatus === "success") {
+      window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+    }
+  }, [pageStatus]);
 
   /* ── Cascading selects ── */
   useEffect(() => {
@@ -411,6 +432,10 @@ if (!form.email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) {
   /* ── Submit ── */
   const handleSubmit = async () => {
     setError("");
+    if (!rulesAccepted) {
+      setError("Please agree to follow the hostel rules before submitting.");
+      return;
+    }
     if (!validate1() || !validate2() || !validate3()) return;
 
     setLoading(true);
@@ -1042,7 +1067,7 @@ const set = k => e => {
                 <>
                   <Field label="Building *">
                     <div style={{ position: "relative" }}>
-                      <select value={selBuilding} onChange={e => { setSelBuilding(e.target.value); setError(""); }}
+                      <select value={selBuilding} onChange={e => { setSelBuilding(e.target.value); setRulesAccepted(false); setError(""); }}
                         style={selStyle}>
                         <option value="">Select building</option>
                         {buildings.map(b => <option key={b._id} value={b._id}>{b.buildingName}</option>)}
@@ -1110,9 +1135,91 @@ const set = k => e => {
               <RowBtns>
                 <SecondaryBtn onClick={() => { setError(""); setStep(2); }}>← Back</SecondaryBtn>
                 <PrimaryBtn
+                  onClick={() => next(validate3, 4)}
+                  disabled={!selBuilding || !selFloor || !selRoom || !selBed}
+                  style={{ opacity: (!selBuilding || !selFloor || !selRoom || !selBed) ? 0.6 : 1 }}
+                >
+                  Next: Review Rules →
+                </PrimaryBtn>
+              </RowBtns>
+            </div>
+          )}
+
+          {/* ══ STEP 4: Hostel Rules & Submit ══ */}
+          {step === 4 && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+              <div style={{
+                display: "flex", alignItems: "center", gap: 12, padding: "16px 18px",
+                borderRadius: 14, color: "#fff",
+                background: "linear-gradient(135deg,#4338ca,#7c3aed)",
+                boxShadow: "0 8px 22px rgba(79,70,229,0.2)",
+              }}>
+                <div style={{
+                  width: 44, height: 44, borderRadius: 12, flex: "0 0 auto",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  background: "rgba(255,255,255,0.16)", border: "1px solid rgba(255,255,255,0.24)",
+                }}>
+                  <ShieldCheck size={25} strokeWidth={2.3} />
+                </div>
+                <div>
+                  <p style={{ margin: "0 0 3px", fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", opacity: 0.78 }}>
+                    Please read carefully
+                  </p>
+                  <h2 style={{ margin: 0, fontSize: "clamp(18px,4vw,23px)", lineHeight: 1.25, fontWeight: 800 }}>
+                    {buildings.find(b => b._id === selBuilding)?.buildingName || "Selected Building"} Hostel Rules:
+                  </h2>
+                </div>
+              </div>
+
+              <div style={{
+                border: "1px solid #e2e8f0", borderRadius: 14, overflow: "hidden",
+                background: "#fff", boxShadow: "0 5px 18px rgba(15,23,42,0.05)",
+              }}>
+                {HOSTEL_RULES.map((rule, index) => (
+                  <div key={rule.title} style={{
+                    display: "flex", gap: 13, padding: "14px 16px",
+                    borderBottom: index < HOSTEL_RULES.length - 1 ? "1px solid #eef2f7" : "none",
+                    background: index % 2 === 0 ? "#fff" : "#fafbff",
+                  }}>
+                    <div style={{
+                      width: 27, height: 27, borderRadius: 8, flex: "0 0 auto",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      background: "#eef2ff", color: "#4f46e5", fontSize: 12, fontWeight: 800,
+                    }}>
+                      {index + 1}
+                    </div>
+                    <p style={{ margin: 0, color: "#475569", fontSize: 13, lineHeight: 1.6 }}>
+                      <strong style={{ color: "#172554", fontWeight: 750 }}>{rule.title}</strong>
+                      <span style={{ color: "#94a3b8" }}> — </span>{rule.text}
+                    </p>
+                  </div>
+                ))}
+              </div>
+
+              <label style={{
+                display: "flex", alignItems: "flex-start", gap: 12, padding: "15px 16px",
+                borderRadius: 12, cursor: "pointer",
+                border: `1.5px solid ${rulesAccepted ? "#10b981" : "#cbd5e1"}`,
+                background: rulesAccepted ? "#ecfdf5" : "#f8fafc",
+                transition: "all 0.2s",
+              }}>
+                <input
+                  type="checkbox"
+                  checked={rulesAccepted}
+                  onChange={e => { setRulesAccepted(e.target.checked); setError(""); }}
+                  style={{ width: 19, height: 19, margin: "1px 0 0", accentColor: "#10b981", cursor: "pointer", flex: "0 0 auto" }}
+                />
+                <span style={{ fontSize: 13, lineHeight: 1.55, color: rulesAccepted ? "#065f46" : "#334155", fontWeight: 650 }}>
+                  I have read and agree to follow all the hostel rules listed above.
+                </span>
+              </label>
+
+              <RowBtns>
+                <SecondaryBtn onClick={() => { setError(""); setStep(3); }}>← Back</SecondaryBtn>
+                <PrimaryBtn
                   onClick={handleSubmit}
-                  disabled={loading || !selBuilding || !selFloor || !selRoom || !selBed}
-                  style={{ opacity: (!selBuilding || !selFloor || !selRoom || !selBed || loading) ? 0.6 : 1 }}
+                  disabled={loading || !rulesAccepted}
+                  style={{ opacity: (loading || !rulesAccepted) ? 0.6 : 1 }}
                 >
                   {loading ? (
                     <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -1179,7 +1286,7 @@ function DuesStartDateCard({ children, error }) {
 
 function TwoCol({ children }) {
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))", gap: 14 }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
       {children}
     </div>
   );
