@@ -28,11 +28,24 @@ import { initFirebase } from "./config/firebase.js";
 import { backfillTenantSecureIds } from "./utils/tenantSecureId.js";
 import { initializeWhatsAppReminderAutomation } from "./utils/whatsappReminderAutomation.js";
 import { initializeRentDueScheduler } from "./services/rentDueGeneration.js";
+import { sendOwnerLoginOtp } from "./utils/whatsappService.js";
+import {
+  indianMobileLookupRegex,
+  normalizeIndianMobile,
+  OwnerLoginOtpManager,
+  SlidingWindowRateLimiter,
+} from "./utils/ownerLoginOtp.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname  = path.dirname(__filename);
 
 dotenv.config({ path: path.join(__dirname, ".env") });
+
+const ownerLoginOtpManager = new OwnerLoginOtpManager({ pepper: process.env.JWT_SECRET });
+const ownerOtpSendIpLimiter = new SlidingWindowRateLimiter({ limit: 10, windowMs: 15 * 60 * 1000 });
+const ownerOtpVerifyIpLimiter = new SlidingWindowRateLimiter({ limit: 30, windowMs: 15 * 60 * 1000 });
+const registrationOtpManager = new OwnerLoginOtpManager({ pepper: process.env.JWT_SECRET });
+const registrationVerificationStore = new Map();
 
 const app = express();
 app.use(express.json());
@@ -158,6 +171,96 @@ function blockedLoginPayload(user) {
       address: user.address,
     },
   };
+}
+
+function loginUserPayload(user) {
+  return {
+    id:              user._id,
+    name:            user.name,
+    owner:           user.owner,
+    ph:              user.ph,
+    email:           user.email,
+    address:         user.address,
+    role:            user.role,
+    loginStatus:     user.loginStatus,
+    planStatus:      user.planStatus,
+    planActivatedAt: user.planActivatedAt,
+    planExpiresAt:   user.planExpiresAt,
+    planRenewalAt:   user.planRenewalAt,
+    usedFreePlan:    user.usedFreePlan,
+    planBeds:        user.planBeds,
+  };
+}
+
+async function sendOwnerLoginRestriction(res, user) {
+  if (user.loginStatus === "pending") {
+    res.status(403).json({
+      message: "Your account is awaiting approval. We will respond shortly.",
+      pending: true,
+      extensionPending: user.extensionRequest?.requested || false,
+    });
+    return true;
+  }
+  if (user.loginStatus === "blocked" && user.planStatus === "expired") {
+    res.status(403).json(expiredPlanPayload(user));
+    return true;
+  }
+  if (user.loginStatus === "blocked") {
+    res.status(403).json(blockedLoginPayload(user));
+    return true;
+  }
+  if (user.planExpiresAt && new Date() >= new Date(user.planExpiresAt)) {
+    await applyPlanExpiryIfNeeded(user);
+    res.status(403).json(expiredPlanPayload(user));
+    return true;
+  }
+  if (user.planStatus === "expired") {
+    await applyPlanExpiryIfNeeded(user);
+    res.status(403).json(expiredPlanPayload(user));
+    return true;
+  }
+  return false;
+}
+
+async function findOwnerByMobile(normalizedMobile) {
+  const owners = await User.find({
+    role: "user",
+    ph: indianMobileLookupRegex(normalizedMobile),
+  })
+    .limit(2)
+    .populate("plan", "name price days beds isFree");
+
+  if (owners.length > 1) {
+    const error = new Error("Multiple owner accounts use this mobile number. Please contact support.");
+    error.code = "DUPLICATE_OWNER_MOBILE";
+    throw error;
+  }
+  return owners[0] || null;
+}
+
+function registrationVerificationDigest(token) {
+  return crypto.createHmac("sha256", process.env.JWT_SECRET).update(token).digest();
+}
+
+function issueRegistrationVerification(mobile) {
+  const token = crypto.randomBytes(32).toString("hex");
+  registrationVerificationStore.set(mobile, {
+    tokenHash: registrationVerificationDigest(token),
+    expiresAt: Date.now() + 10 * 60 * 1000,
+  });
+  return token;
+}
+
+function consumeRegistrationVerification(mobile, token) {
+  const entry = registrationVerificationStore.get(mobile);
+  if (!entry || entry.expiresAt <= Date.now() || !token) {
+    registrationVerificationStore.delete(mobile);
+    return false;
+  }
+  const suppliedHash = registrationVerificationDigest(String(token));
+  if (!crypto.timingSafeEqual(entry.tokenHash, suppliedHash)) return false;
+  registrationVerificationStore.delete(mobile);
+  return true;
 }
 
 const passwordResetStore = new Map();
@@ -392,16 +495,108 @@ app.patch("/api/profile", authMiddleware, async (req, res) => {
 });
 
 // ── Register ──────────────────────────────────────────────────────────────────
+app.post("/api/register/send-otp", async (req, res) => {
+  let otpKey = null;
+  let issuedNonce = null;
+  try {
+    const mobile = normalizeIndianMobile(req.body?.mobile);
+    const email = String(req.body?.email || "").toLowerCase().trim();
+    ownerOtpSendIpLimiter.consume(`register-ip:${req.ip}`);
+    ownerOtpSendIpLimiter.consume(`register-mobile:${mobile}`);
+
+    if (!email || !/\S+@\S+\.\S+/.test(email)) {
+      return res.status(400).json({ message: "Enter a valid email address." });
+    }
+    const existingEmail = await User.findOne({ email }).select("_id").lean();
+    if (existingEmail) {
+      return res.status(409).json({ message: "Email already registered." });
+    }
+
+    const existing = await User.findOne({
+      role: "user",
+      ph: indianMobileLookupRegex(mobile),
+    }).select("_id").lean();
+    if (existing) {
+      return res.status(409).json({ message: "An account already exists with this mobile number." });
+    }
+
+    otpKey = `register:${mobile}`;
+    const issued = registrationOtpManager.issue(otpKey, mobile);
+    issuedNonce = issued.nonce;
+    await sendOwnerLoginOtp({ phoneNumber: mobile, otp: issued.otp });
+
+    res.json({
+      success: true,
+      message: "OTP sent to your WhatsApp number.",
+      expiresInSeconds: issued.expiresInSeconds,
+      resendAfterSeconds: issued.resendAfterSeconds,
+    });
+  } catch (err) {
+    if (otpKey && issuedNonce) registrationOtpManager.cancel(otpKey, issuedNonce);
+    if (err.code === "INVALID_MOBILE") return res.status(400).json({ message: err.message });
+    if (err.code === "RESEND_COOLDOWN" || err.code === "RATE_LIMITED") {
+      res.set("Retry-After", String(err.retryAfterSeconds || 60));
+      return res.status(429).json({ message: err.message, retryAfterSeconds: err.retryAfterSeconds || 60 });
+    }
+    if (err.code === "WHATSAPP_CONFIG_ERROR" || err.code === "WHATSAPP_OTP_CONFIG_ERROR") {
+      return res.status(503).json({ message: "WhatsApp OTP verification is not fully configured." });
+    }
+    if (err.code === "WHATSAPP_API_ERROR") {
+      return res.status(502).json({ message: "Unable to send the WhatsApp OTP right now. Please try again." });
+    }
+    console.error("Registration OTP send error:", err.message);
+    res.status(500).json({ message: "Unable to send OTP. Please try again." });
+  }
+});
+
+app.post("/api/register/verify-otp", async (req, res) => {
+  try {
+    const mobile = normalizeIndianMobile(req.body?.mobile);
+    const otp = String(req.body?.otp || "").trim();
+    if (!/^\d{6}$/.test(otp)) return res.status(400).json({ message: "Enter the 6-digit OTP." });
+
+    ownerOtpVerifyIpLimiter.consume(`register-ip:${req.ip}`);
+    ownerOtpVerifyIpLimiter.consume(`register-mobile:${mobile}`);
+    registrationOtpManager.verify(`register:${mobile}`, mobile, otp);
+
+    res.json({
+      success: true,
+      verificationToken: issueRegistrationVerification(mobile),
+      message: "Mobile number verified.",
+    });
+  } catch (err) {
+    if (err.code === "INVALID_MOBILE") return res.status(400).json({ message: err.message });
+    if (["OTP_EXPIRED", "INVALID_OTP", "OTP_ATTEMPTS_EXCEEDED"].includes(err.code)) {
+      return res.status(400).json({ message: err.message, remainingAttempts: err.remainingAttempts });
+    }
+    if (err.code === "RATE_LIMITED") {
+      res.set("Retry-After", String(err.retryAfterSeconds || 60));
+      return res.status(429).json({ message: err.message, retryAfterSeconds: err.retryAfterSeconds || 60 });
+    }
+    console.error("Registration OTP verification error:", err.message);
+    res.status(500).json({ message: "Unable to verify OTP. Please try again." });
+  }
+});
+
 app.post("/api/register", async (req, res) => {
   try {
-    const { name, owner, ph, email, password, address, planId } = req.body;
+    const { name, owner, ph, email, password, address, planId, verificationToken } = req.body;
 
     if (!name || !owner || !ph || !email || !password || !address)
       return res.status(400).json({ message: "All fields are required." });
 
+    const normalizedMobile = normalizeIndianMobile(ph);
+
     const existing = await User.findOne({ email: email.toLowerCase().trim() }).select("_id").lean();
     if (existing)
       return res.status(400).json({ message: "Email already registered." });
+
+    const existingMobile = await User.findOne({
+      role: "user",
+      ph: indianMobileLookupRegex(normalizedMobile),
+    }).select("_id").lean();
+    if (existingMobile)
+      return res.status(400).json({ message: "Mobile number already registered." });
 
     const hashed = await bcrypt.hash(password, 10);
 
@@ -435,10 +630,14 @@ app.post("/api/register", async (req, res) => {
       }
     }
 
+    if (!consumeRegistrationVerification(normalizedMobile, verificationToken)) {
+      return res.status(403).json({ message: "Verify your mobile number with WhatsApp OTP before creating the account." });
+    }
+
     const user = new User({
       name:            name.trim(),
       owner:           owner.trim(),
-      ph:              ph.trim(),
+      ph:              normalizedMobile.slice(2),
       email:           email.toLowerCase().trim(),
       password:        hashed,
       address:         address.trim(),
@@ -491,14 +690,113 @@ app.post("/api/register", async (req, res) => {
       },
     });
   } catch (err) {
+    if (err.code === "INVALID_MOBILE") return res.status(400).json({ message: err.message });
     res.status(500).json({ message: "Server error.", error: err.message });
   }
 });
 
 // ── Login ─────────────────────────────────────────────────────────────────────
+app.post("/api/owner-login/send-otp", async (req, res) => {
+  let ownerId = null;
+  let issuedNonce = null;
+  try {
+    const mobile = normalizeIndianMobile(req.body?.mobile);
+    ownerOtpSendIpLimiter.consume(`ip:${req.ip}`);
+    ownerOtpSendIpLimiter.consume(`mobile:${mobile}`);
+
+    const owner = await findOwnerByMobile(mobile);
+    if (!owner) {
+      return res.status(404).json({
+        message: "No owner account was found with this mobile number.",
+        accountNotFound: true,
+      });
+    }
+    if (await sendOwnerLoginRestriction(res, owner)) return;
+
+    ownerId = String(owner._id);
+    const issued = ownerLoginOtpManager.issue(ownerId, mobile);
+    issuedNonce = issued.nonce;
+    await sendOwnerLoginOtp({ phoneNumber: mobile, otp: issued.otp });
+
+    res.json({
+      success: true,
+      message: "OTP sent to your registered WhatsApp number.",
+      expiresInSeconds: issued.expiresInSeconds,
+      resendAfterSeconds: issued.resendAfterSeconds,
+    });
+  } catch (err) {
+    if (ownerId && issuedNonce) ownerLoginOtpManager.cancel(ownerId, issuedNonce);
+
+    if (err.code === "INVALID_MOBILE") return res.status(400).json({ message: err.message });
+    if (err.code === "DUPLICATE_OWNER_MOBILE") return res.status(409).json({ message: err.message });
+    if (err.code === "RESEND_COOLDOWN" || err.code === "RATE_LIMITED") {
+      res.set("Retry-After", String(err.retryAfterSeconds || 60));
+      return res.status(429).json({ message: err.message, retryAfterSeconds: err.retryAfterSeconds || 60 });
+    }
+    if (err.code === "WHATSAPP_CONFIG_ERROR" || err.code === "WHATSAPP_OTP_CONFIG_ERROR") {
+      console.error("Owner OTP configuration error:", err.message);
+      return res.status(503).json({ message: "WhatsApp OTP login is not fully configured. Please contact support." });
+    }
+    if (err.code === "WHATSAPP_API_ERROR") {
+      return res.status(502).json({ message: "Unable to send the WhatsApp OTP right now. Please try again." });
+    }
+    console.error("Owner OTP send error:", err.message);
+    res.status(500).json({ message: "Unable to send OTP. Please try again." });
+  }
+});
+
+app.post("/api/owner-login/verify-otp", async (req, res) => {
+  try {
+    const mobile = normalizeIndianMobile(req.body?.mobile);
+    const otp = String(req.body?.otp || "").trim();
+    if (!/^\d{6}$/.test(otp)) return res.status(400).json({ message: "Enter the 6-digit OTP." });
+
+    ownerOtpVerifyIpLimiter.consume(`ip:${req.ip}`);
+    ownerOtpVerifyIpLimiter.consume(`mobile:${mobile}`);
+    const owner = await findOwnerByMobile(mobile);
+    if (!owner) {
+      return res.status(404).json({
+        message: "No owner account was found with this mobile number.",
+        accountNotFound: true,
+      });
+    }
+    if (await sendOwnerLoginRestriction(res, owner)) return;
+
+    ownerLoginOtpManager.verify(String(owner._id), mobile, otp);
+    const token = jwt.sign(
+      { id: owner._id, role: owner.role },
+      process.env.JWT_SECRET,
+      { expiresIn: "1d" }
+    );
+
+    res.json({
+      message: "Logged in successfully!",
+      token,
+      user: loginUserPayload(owner),
+    });
+  } catch (err) {
+    if (err.code === "INVALID_MOBILE") return res.status(400).json({ message: err.message });
+    if (err.code === "DUPLICATE_OWNER_MOBILE") return res.status(409).json({ message: err.message });
+    if (["OTP_EXPIRED", "INVALID_OTP", "OTP_ATTEMPTS_EXCEEDED"].includes(err.code)) {
+      return res.status(400).json({
+        message: err.message,
+        remainingAttempts: err.remainingAttempts,
+        expired: err.code === "OTP_EXPIRED",
+      });
+    }
+    if (err.code === "RATE_LIMITED") {
+      res.set("Retry-After", String(err.retryAfterSeconds || 60));
+      return res.status(429).json({ message: err.message, retryAfterSeconds: err.retryAfterSeconds || 60 });
+    }
+    console.error("Owner OTP verification error:", err.message);
+    res.status(500).json({ message: "Unable to verify OTP. Please try again." });
+  }
+});
+
+// Existing email/password endpoint remains available for backward compatibility.
 app.post("/api/login", async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { email, password, masterOnly } = req.body;
 
     if (!email || !password)
       return res.status(400).json({ message: "Email and password required." });
@@ -512,6 +810,9 @@ app.post("/api/login", async (req, res) => {
     const valid = await bcrypt.compare(password, user.password);
     if (!valid)
       return res.status(400).json({ message: "Invalid credentials." });
+
+    if (masterOnly === true && user.role !== "master")
+      return res.status(403).json({ message: "Owner accounts must sign in with WhatsApp OTP." });
 
     // ── Pending approval ──────────────────────────────────────────────────────
     if (user.loginStatus === "pending") {

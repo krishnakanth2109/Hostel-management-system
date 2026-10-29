@@ -2,6 +2,8 @@ import axios from "axios";
 
 const DEFAULT_API_VERSION = "v25.0";
 const DEFAULT_TEMPLATE_NAME = "rent_due_reminder";
+const OWNER_OTP_TEMPLATE_NAME = "nilayam_otp_verification";
+const OTP_PLACEHOLDER = "{{OTP}}";
 
 function getWhatsAppConfig() {
   const accessToken = (process.env.WHATSAPP_ACCESS_TOKEN || "").trim();
@@ -22,6 +24,94 @@ function getWhatsAppConfig() {
   }
 
   return { accessToken, phoneNumberId, apiVersion, templateName };
+}
+
+function replaceOtpPlaceholder(value, otp, state) {
+  if (Array.isArray(value)) return value.map((item) => replaceOtpPlaceholder(item, otp, state));
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, item]) => [key, replaceOtpPlaceholder(item, otp, state)])
+    );
+  }
+  if (typeof value === "string" && value.includes(OTP_PLACEHOLDER)) {
+    state.replacements += 1;
+    return value.replaceAll(OTP_PLACEHOLDER, otp);
+  }
+  return value;
+}
+
+export function buildOwnerOtpTemplatePayload({ phoneNumber, otp, env = process.env }) {
+  const languageCode = (env.WHATSAPP_OTP_TEMPLATE_LANGUAGE || "").trim();
+  const componentsJson = (env.WHATSAPP_OTP_TEMPLATE_COMPONENTS_JSON || "").trim();
+  const templateName = (env.WHATSAPP_OTP_TEMPLATE_NAME || OWNER_OTP_TEMPLATE_NAME).trim();
+
+  if (!languageCode || !componentsJson || !templateName) {
+    const error = new Error(
+      "WhatsApp OTP template configuration is incomplete. Set its approved language and components."
+    );
+    error.code = "WHATSAPP_OTP_CONFIG_ERROR";
+    throw error;
+  }
+
+  let configuredComponents;
+  try {
+    configuredComponents = JSON.parse(componentsJson);
+  } catch {
+    const error = new Error("WHATSAPP_OTP_TEMPLATE_COMPONENTS_JSON must be valid JSON.");
+    error.code = "WHATSAPP_OTP_CONFIG_ERROR";
+    throw error;
+  }
+  if (!Array.isArray(configuredComponents)) {
+    const error = new Error("WhatsApp OTP template components must be a JSON array.");
+    error.code = "WHATSAPP_OTP_CONFIG_ERROR";
+    throw error;
+  }
+
+  const state = { replacements: 0 };
+  const components = replaceOtpPlaceholder(configuredComponents, String(otp), state);
+  if (state.replacements === 0) {
+    const error = new Error(`WhatsApp OTP template components must contain ${OTP_PLACEHOLDER}.`);
+    error.code = "WHATSAPP_OTP_CONFIG_ERROR";
+    throw error;
+  }
+
+  return {
+    messaging_product: "whatsapp",
+    recipient_type: "individual",
+    to: formatWhatsAppPhoneNumber(phoneNumber),
+    type: "template",
+    template: { name: templateName, language: { code: languageCode }, components },
+  };
+}
+
+export async function sendOwnerLoginOtp({ phoneNumber, otp }) {
+  const { accessToken, phoneNumberId, apiVersion } = getWhatsAppConfig();
+  const payload = buildOwnerOtpTemplatePayload({ phoneNumber, otp });
+
+  try {
+    const { data } = await axios.post(
+      `https://graph.facebook.com/${apiVersion}/${phoneNumberId}/messages`,
+      payload,
+      {
+        headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+        timeout: 15000,
+      }
+    );
+    return { messageId: data.messages?.[0]?.id || null };
+  } catch (err) {
+    const metaError = err.response?.data?.error;
+    console.error("WhatsApp Cloud API OTP delivery error:", {
+      status: err.response?.status || null,
+      code: metaError?.code || null,
+      type: metaError?.type || null,
+      message: metaError?.message || err.message,
+      fbtraceId: metaError?.fbtrace_id || null,
+    });
+    const error = new Error("Meta could not accept the WhatsApp OTP message.");
+    error.code = "WHATSAPP_API_ERROR";
+    error.status = err.response?.status || 502;
+    throw error;
+  }
 }
 
 export function formatWhatsAppPhoneNumber(phoneNumber) {

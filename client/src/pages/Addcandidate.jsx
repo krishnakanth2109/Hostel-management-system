@@ -450,7 +450,7 @@ if (form.emailError) {
         setError("");
       }
     }}
-    placeholder="9876543210"
+    placeholder="Mobile number (10 digits)"
   />
 
   {error && (

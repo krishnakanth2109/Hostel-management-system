@@ -303,7 +303,7 @@ export default function TenantRegisterPage() {
                 <Field label="Phone Number" error={errors.phone} required>
                   <Input
                     type="tel"
-                    placeholder="9876543210"
+                    placeholder="Mobile number (10 digits)"
                     value={form.phone}
                     onChange={set("phone")}
                     error={errors.phone}

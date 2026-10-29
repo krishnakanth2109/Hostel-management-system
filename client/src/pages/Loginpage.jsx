@@ -16,6 +16,11 @@ export default function LoginPage() {
   const [showPass, setShowPass] = useState(false);
   const [mounted,  setMounted]  = useState(false);
   const [toast,    setToast]    = useState("");
+  const [loginMode, setLoginMode] = useState("owner");
+  const [mobile, setMobile] = useState("");
+  const [ownerOtp, setOwnerOtp] = useState("");
+  const [ownerOtpStep, setOwnerOtpStep] = useState("mobile");
+  const [resendCountdown, setResendCountdown] = useState(0);
 
   const [forgotOpen, setForgotOpen] = useState(false);
   const [forgotStep, setForgotStep] = useState("email");
@@ -63,6 +68,14 @@ export default function LoginPage() {
     return () => clearTimeout(t);
   }, [navigate]);
 
+  useEffect(() => {
+    if (resendCountdown <= 0) return undefined;
+    const timer = window.setInterval(() => {
+      setResendCountdown((seconds) => Math.max(0, seconds - 1));
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [resendCountdown]);
+
   const reset = () => {
     setError(""); setBlocked(false); setPending(false);
     setPlanExpired(false); setPlanInfo(null); setUserInfo(null);
@@ -79,7 +92,7 @@ export default function LoginPage() {
       const res  = await fetch(`${API}/login`, {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ email: email.trim().toLowerCase(), password }),
+        body:    JSON.stringify({ email: email.trim().toLowerCase(), password, masterOnly: true }),
       });
       const data = await res.json();
 
@@ -107,6 +120,90 @@ export default function LoginPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const applyOwnerRestriction = (res, data) => {
+    if (res.status === 403 && data.pending) {
+      setPending(true);
+      setExtensionPending(data.extensionPending || false);
+      return true;
+    }
+    if (res.status === 403 && data.blocked) {
+      setBlocked(true);
+      return true;
+    }
+    if (res.status === 403 && data.planExpired) {
+      setPlanExpired(true);
+      setPlanInfo(data.planInfo);
+      setUserInfo(data.userInfo);
+      setExpiredUserId(data.userId);
+      setExtensionPending(data.extensionPending || false);
+      return true;
+    }
+    return false;
+  };
+
+  const sendOwnerOtp = async (e) => {
+    e?.preventDefault();
+    const digits = mobile.replace(/\D/g, "");
+    if (!/^(?:91|0)?[6-9]\d{9}$/.test(digits)) {
+      return setError("Enter your registered 10-digit Indian mobile number.");
+    }
+    reset();
+    setLoading(true);
+    try {
+      const res = await fetch(`${API}/owner-login/send-otp`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mobile }),
+      });
+      const data = await res.json();
+      if (applyOwnerRestriction(res, data)) return;
+      if (!res.ok) {
+        if (data.retryAfterSeconds) setResendCountdown(data.retryAfterSeconds);
+        return setError(data.message || "Unable to send OTP. Please try again.");
+      }
+      setOwnerOtpStep("otp");
+      setOwnerOtp("");
+      setResendCountdown(data.resendAfterSeconds || 60);
+    } catch {
+      setError("Cannot connect to server. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const verifyOwnerOtp = async (e) => {
+    e.preventDefault();
+    if (!/^\d{6}$/.test(ownerOtp)) return setError("Enter the 6-digit OTP.");
+    reset();
+    setLoading(true);
+    try {
+      const res = await fetch(`${API}/owner-login/verify-otp`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mobile, otp: ownerOtp }),
+      });
+      const data = await res.json();
+      if (applyOwnerRestriction(res, data)) return;
+      if (!res.ok) return setError(data.message || "OTP verification failed.");
+
+      sessionStorage.setItem("token", data.token);
+      sessionStorage.setItem("user", JSON.stringify(data.user));
+      navigate("/dashboard", { replace: true });
+    } catch {
+      setError("Cannot connect to server. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const changeLoginMode = (mode) => {
+    setLoginMode(mode);
+    setOwnerOtpStep("mobile");
+    setOwnerOtp("");
+    setResendCountdown(0);
+    reset();
   };
 
   const openRenewModal = async () => {
@@ -284,6 +381,9 @@ export default function LoginPage() {
         .lp-hd { display:none; }
 
         .lp-form { display:flex; flex-direction:column; gap:24px; }
+        .lp-mode { display:grid; grid-template-columns:1fr 1fr; gap:5px; padding:5px; border-radius:12px; background:#eef4f4; }
+        .lp-mode-btn { min-height:40px; border:0; border-radius:9px; background:transparent; color:#65717b; font:700 13px 'Plus Jakarta Sans',sans-serif; cursor:pointer; }
+        .lp-mode-btn.on { background:#fff; color:#287c7e; box-shadow:0 2px 8px rgba(39,74,82,.1); }
         .lp-field { display:flex; flex-direction:column; gap:12px; }
         .lp-lbl { font-size:16px; font-weight:600; color:#142337; transition:color 0.2s; }
         .lp-lbl.on { color:#2e8f91; }
@@ -339,6 +439,12 @@ export default function LoginPage() {
         .lp-btn:disabled::after { content:"Signing in..."; }
         .lp-btn:not(:disabled):hover { transform:translateY(-1px); box-shadow:0 12px 24px rgba(50,133,135,0.3); }
         .lp-btn:disabled { opacity:0.6; cursor:not-allowed; }
+        .lp-btn.lp-otp-btn { font-size:17px; }
+        .lp-btn.lp-otp-btn::after { display:none; }
+        .lp-otp-meta { display:flex; justify-content:space-between; align-items:center; gap:12px; margin-top:-10px; color:#707982; font-size:12.5px; }
+        .lp-text-btn { padding:0; border:0; background:transparent; color:#2c8688; font:700 12.5px 'Plus Jakarta Sans',sans-serif; cursor:pointer; }
+        .lp-text-btn:disabled { color:#9ca3af; cursor:not-allowed; }
+        .lp-otp-info { padding:10px 13px; border:1px solid #b7e4d1; border-radius:9px; background:#effcf6; color:#147a56; font-size:12.5px; line-height:1.45; }
         .lp-spin { width:15px; height:15px; border:2px solid rgba(255,255,255,0.35); border-top-color:#fff; border-radius:50%; animation:lp-rot 0.65s linear infinite; }
         @keyframes lp-rot { to{transform:rotate(360deg)} }
 
@@ -795,7 +901,50 @@ export default function LoginPage() {
             </div>
             <div className="lp-hd"><h1>Welcome back 👋</h1><p>Sign in to your account to continue</p></div>
 
-            <form className="lp-form" onSubmit={handleLogin}>
+            <form className="lp-form" onSubmit={loginMode === "owner" ? (ownerOtpStep === "mobile" ? sendOwnerOtp : verifyOwnerOtp) : handleLogin}>
+              <div className="lp-mode" role="tablist" aria-label="Login type">
+                <button type="button" className={`lp-mode-btn ${loginMode === "owner" ? "on" : ""}`} onClick={() => changeLoginMode("owner")}>OTP Login</button>
+                <button type="button" className={`lp-mode-btn ${loginMode === "master" ? "on" : ""}`} onClick={() => changeLoginMode("master")}>Email Login</button>
+              </div>
+
+              {loginMode === "owner" ? (
+                <>
+                  <div className="lp-field">
+                    <label className={`lp-lbl ${focused === "mobile" ? "on" : ""}`}>Registered Mobile Number</label>
+                    <div className="lp-iw">
+                      <span className="lp-field-icon" aria-hidden="true">
+                        <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><rect x="6" y="2" width="12" height="20" rx="2"/><path d="M10 18h4"/></svg>
+                      </span>
+                      <input type="tel" inputMode="numeric" className={`lp-inp ${error ? "err" : ""}`} value={mobile}
+                        onChange={(e) => { setMobile(e.target.value); setError(""); }}
+                        onFocus={() => setFocused("mobile")} onBlur={() => setFocused("")}
+                        placeholder="Mobile number (10 digits)" autoFocus autoComplete="tel" disabled={ownerOtpStep === "otp"} />
+                    </div>
+                  </div>
+                  {ownerOtpStep === "otp" && (
+                    <>
+                      <div className="lp-otp-info">A 6-digit login code was sent to the WhatsApp number registered with this owner account.</div>
+                      <div className="lp-field">
+                        <label className={`lp-lbl ${focused === "ownerOtp" ? "on" : ""}`}>WhatsApp OTP</label>
+                        <div className="lp-iw">
+                          <span className="lp-field-icon" aria-hidden="true"><svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg></span>
+                          <input type="text" inputMode="numeric" maxLength={6} className={`lp-inp ${error ? "err" : ""}`} value={ownerOtp}
+                            onChange={(e) => { setOwnerOtp(e.target.value.replace(/\D/g, "").slice(0, 6)); setError(""); }}
+                            onFocus={() => setFocused("ownerOtp")} onBlur={() => setFocused("")}
+                            placeholder="Enter 6-digit OTP" autoFocus autoComplete="one-time-code" />
+                        </div>
+                      </div>
+                      <div className="lp-otp-meta">
+                        <button type="button" className="lp-text-btn" onClick={() => { setOwnerOtpStep("mobile"); setOwnerOtp(""); setError(""); }}>Change number</button>
+                        <button type="button" className="lp-text-btn" onClick={sendOwnerOtp} disabled={loading || resendCountdown > 0}>
+                          {resendCountdown > 0 ? `Resend in ${resendCountdown}s` : "Resend OTP"}
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </>
+              ) : (
+                <>
               <div className="lp-field">
                 <label className={`lp-lbl ${focused === "email" ? "on" : ""}`}>Email Address</label>
                 <div className="lp-iw">
@@ -838,6 +987,8 @@ export default function LoginPage() {
                 <input type="checkbox" />
                 <span>Remember Me</span>
               </label>
+                </>
+              )}
 
               {error && (
                 <div className="lp-err">
@@ -869,9 +1020,11 @@ export default function LoginPage() {
                 </div>
               )}
 
-              <button type="submit" className="lp-btn" disabled={loading}>
+              <button type="submit" className={`lp-btn ${loginMode === "owner" ? "lp-otp-btn" : ""}`} disabled={loading}>
                 {loading && <div className="lp-spin" />}
-                {loading ? "Signing in…" : "Sign in →"}
+                {loginMode === "owner"
+                  ? loading ? (ownerOtpStep === "mobile" ? "Sending OTP..." : "Verifying...") : (ownerOtpStep === "mobile" ? "Send WhatsApp OTP" : "Verify & Login")
+                  : loading ? "Signing in..." : "Sign in"}
               </button>
               <div className="lp-signup">
                 New here? <Link to="/register">Create an account</Link>

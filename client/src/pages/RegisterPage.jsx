@@ -13,6 +13,11 @@ export default function RegisterPage() {
   const [showPass, setShowPass] = useState(false);
   const [mounted,  setMounted]  = useState(false);
   const [pending,  setPending]  = useState(false);
+  const [otpLoading, setOtpLoading] = useState(false);
+  const [registrationStep, setRegistrationStep] = useState("details");
+  const [registrationOtp, setRegistrationOtp] = useState("");
+  const [resendCountdown, setResendCountdown] = useState(0);
+  const [verificationToken, setVerificationToken] = useState("");
 
   const navigate  = useNavigate();
   const location  = useLocation();
@@ -23,53 +28,150 @@ export default function RegisterPage() {
     return () => clearTimeout(t);
   }, []);
 
+  useEffect(() => {
+    if (resendCountdown <= 0) return undefined;
+    const timer = window.setInterval(() => {
+      setResendCountdown((seconds) => Math.max(0, seconds - 1));
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [resendCountdown]);
+
   const set = (k) => (e) => {
     let value = e.target.value;
-    if (k === "ph") value = value.replace(/\D/g, "").slice(0, 10);
+    if (k === "ph") {
+      value = value.replace(/\D/g, "").slice(0, 10);
+      setRegistrationStep("details");
+      setRegistrationOtp("");
+      setResendCountdown(0);
+      setVerificationToken("");
+    }
     if (k === "name" || k === "owner") value = value.replace(/[^a-zA-Z\s]/g, "");
     setForm({ ...form, [k]: value });
     setError("");
   };
 
+  const validateOtpRequest = () => {
+    if (!/^\d{10}$/.test(form.ph.trim())) {
+      setError("Phone number must be exactly 10 digits."); return false;
+    }
+    if (!/\S+@\S+\.\S+/.test(form.email)) {
+      setError("Enter your valid email address before requesting OTP."); return false;
+    }
+    return true;
+  };
+
+  const validateRegistrationForm = () => {
+    const { name, owner, ph, email, password, address } = form;
+    if (!name || !owner || !ph || !email || !password || !address) {
+      setError("All fields are required."); return false;
+    }
+    if (!/^[a-zA-Z\s]+$/.test(name.trim())) {
+      setError("Property / Hostel Name should contain alphabets only."); return false;
+    }
+    if (!/^[a-zA-Z\s]+$/.test(owner.trim())) {
+      setError("Owner Name should contain alphabets only."); return false;
+    }
+    if (!/^\d{10}$/.test(ph.trim())) {
+      setError("Phone number must be exactly 10 digits."); return false;
+    }
+    if (!/\S+@\S+\.\S+/.test(email)) {
+      setError("Please enter a valid email address."); return false;
+    }
+    if (password.length < 6) {
+      setError("Password must be at least 6 characters."); return false;
+    }
+    return true;
+  };
+
+  const createAccount = async (verificationToken) => {
+    const { name, owner, ph, email, password, address } = form;
+    const body = {
+      name: name.trim(), owner: owner.trim(), ph: ph.trim(),
+      email: email.trim().toLowerCase(), password, address: address.trim(), verificationToken,
+    };
+    if (chosenPlan) body.planId = chosenPlan._id;
+
+    const res = await fetch(`${API}/register`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.message || "Registration failed.");
+
+    if (data.pending) {
+      setPending(true);
+      return;
+    }
+    if (data.token && data.user) {
+      sessionStorage.setItem("token", data.token);
+      sessionStorage.setItem("user", JSON.stringify(data.user));
+      navigate(data.user.role === "master" ? "/master/dashboard" : "/dashboard", { replace: true });
+    } else {
+      navigate("/login", { replace: true });
+    }
+  };
+
+  const sendRegistrationOtp = async () => {
+    if (!validateOtpRequest()) return;
+
+    setError(""); setOtpLoading(true);
+    try {
+      const res = await fetch(`${API}/register/send-otp`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mobile: form.ph, email: form.email.trim().toLowerCase() }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        if (data.retryAfterSeconds) setResendCountdown(data.retryAfterSeconds);
+        return setError(data.message || "Unable to send OTP.");
+      }
+      setRegistrationStep("otp");
+      setRegistrationOtp("");
+      setResendCountdown(data.resendAfterSeconds || 60);
+    } catch {
+      setError("Cannot connect to server. Make sure the backend is running.");
+    } finally {
+      setOtpLoading(false);
+    }
+  };
+
+  const verifyRegistrationOtp = async () => {
+    if (!/^\d{6}$/.test(registrationOtp)) return setError("Enter the 6-digit OTP.");
+    setError(""); setOtpLoading(true);
+    try {
+      const res = await fetch(`${API}/register/verify-otp`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mobile: form.ph, otp: registrationOtp }),
+      });
+      const data = await res.json();
+      if (!res.ok) return setError(data.message || "OTP verification failed.");
+      setVerificationToken(data.verificationToken);
+      setRegistrationStep("verified");
+      setRegistrationOtp("");
+      setError("");
+    } catch (err) {
+      setError(err.message || "Cannot connect to server. Please try again.");
+    } finally {
+      setOtpLoading(false);
+    }
+  };
+
   const handleRegister = async (e) => {
     e.preventDefault();
-    const { name, owner, ph, email, password, address } = form;
-    if (!name || !owner || !ph || !email || !password || !address)
-      return setError("All fields are required.");
-    if (!/^[a-zA-Z\s]+$/.test(name.trim()))
-      return setError("Property / Hostel Name should contain alphabets only.");
-    if (!/^[a-zA-Z\s]+$/.test(owner.trim()))
-      return setError("Owner Name should contain alphabets only.");
-    if (!/^\d{10}$/.test(ph.trim()))
-      return setError("Phone number must be exactly 10 digits.");
-    if (!/\S+@\S+\.\S+/.test(email))
-      return setError("Please enter a valid email address.");
-    if (password.length < 6)
-      return setError("Password must be at least 6 characters.");
+    if (!verificationToken) {
+      setError("Please verify your phone number with WhatsApp OTP before creating the account.");
+      return;
+    }
+    if (!validateRegistrationForm()) return;
 
     setError(""); setLoading(true);
     try {
-      const body = { name: name.trim(), owner: owner.trim(), ph: ph.trim(), email: email.trim().toLowerCase(), password, address: address.trim() };
-      if (chosenPlan) body.planId = chosenPlan._id;
-
-      const res  = await fetch(`${API}/register`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-      const data = await res.json();
-      if (!res.ok) return setError(data.message || "Registration failed.");
-
-      if (data.pending) {
-        setPending(true);
-        return;
-      }
-
-      if (data.token && data.user) {
-        sessionStorage.setItem("token", data.token);
-        sessionStorage.setItem("user",  JSON.stringify(data.user));
-        navigate(data.user.role === "master" ? "/master/dashboard" : "/dashboard", { replace: true });
-      } else {
-        navigate("/login", { replace: true });
-      }
-    } catch {
-      setError("Cannot connect to server. Make sure the backend is running.");
+      await createAccount(verificationToken);
+    } catch (err) {
+      setError(err.message || "Cannot connect to server. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -177,9 +279,26 @@ export default function RegisterPage() {
         .rp-textarea:focus { border-color: #76b8ba; box-shadow: 0 0 0 4px rgba(57,151,153,0.11); }
         .rp-textarea.err { border-color: #fca5a5; }
         .rp-err { display: flex; align-items: center; gap: 8px; padding: 10px 13px; background: #fff1f2; border: 1px solid #fecdd3; border-radius: 9px; font-size: 12.5px; color: #e11d48; }
+        .rp-phone-row { display: flex; align-items: stretch; gap: 9px; }
+        .rp-phone-row .rp-iw { flex: 1; min-width: 0; }
+        .rp-send-otp-btn,.rp-verify-otp-btn { min-width: 100px; height: 48px; padding: 0 14px; border: 1px solid #71b7b8; border-radius: 10px; background: #eefafa; color: #247d7f; font: 700 12.5px 'Plus Jakarta Sans',sans-serif; cursor: pointer; white-space: nowrap; transition: background .18s,border-color .18s,color .18s; }
+        .rp-send-otp-btn:hover:not(:disabled),.rp-verify-otp-btn:hover:not(:disabled) { background: #def3f3; border-color: #45999b; }
+        .rp-send-otp-btn:disabled,.rp-verify-otp-btn:disabled { color: #8a999d; border-color: #d8e0e1; background: #f4f6f6; cursor: not-allowed; }
+        .rp-send-otp-btn.verified { color: #147a56; border-color: #9bd8bc; background: #effcf6; }
+        .rp-otp-panel { display: flex; flex-direction: column; gap: 10px; padding: 13px; border: 1px solid #b7e4d1; border-radius: 11px; background: #f5fcf9; }
+        .rp-otp-info { color: #29735a; font-size: 12.5px; line-height: 1.45; }
+        .rp-otp-row { display: flex; align-items: stretch; gap: 9px; }
+        .rp-otp-row .rp-iw { flex: 1; min-width: 0; }
+        .rp-otp-actions { display: flex; justify-content: flex-end; }
+        .rp-text-btn { padding: 0; border: 0; background: transparent; color: #2c8688; font: 700 12.5px 'Plus Jakarta Sans',sans-serif; cursor: pointer; }
+        .rp-text-btn:disabled { color: #9ca3af; cursor: not-allowed; }
+        .rp-verified-info { display: flex; align-items: center; gap: 8px; padding: 10px 13px; border: 1px solid #b7e4d1; border-radius: 9px; background: #effcf6; color: #147a56; font-size: 12.5px; font-weight: 700; }
+        .rp-verification-hint { margin-top: -6px; color: #a15c13; font-size: 12px; text-align: center; }
         .rp-btn { width: 100%; height: 58px; padding: 0 18px; font-size: 17px; font-weight: 700; font-family: 'Plus Jakarta Sans', sans-serif; color: #fff; background: linear-gradient(135deg,#5aaeb0 0%,#3f999b 100%); border: none; border-radius: 13px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; box-shadow: 0 9px 18px rgba(50,133,135,0.24); transition: transform 0.18s, box-shadow 0.18s; margin-top: 4px; }
         .rp-btn:not(:disabled):hover { transform: translateY(-1px); box-shadow: 0 12px 24px rgba(50,133,135,0.3); }
         .rp-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+        .rp-btn.is-disabled { opacity: .55; cursor: not-allowed; box-shadow: none; }
+        .rp-btn.is-disabled:hover { transform: none; box-shadow: none; }
         .rp-spin { width: 15px; height: 15px; border: 2px solid rgba(255,255,255,0.35); border-top-color: #fff; border-radius: 50%; animation: rp-rot 0.65s linear infinite; }
         @keyframes rp-rot { to { transform: rotate(360deg); } }
         .rp-foot { margin-top: 22px; text-align: center; font-size: 15px; color: #2b3440; }
@@ -222,6 +341,7 @@ export default function RegisterPage() {
           .rp-hd h1 { font-size: 23px; }
           .rp-inp,.rp-btn { height: 52px; }
           .rp-inp { padding-left: 50px; padding-right: 46px; }
+          .rp-send-otp-btn,.rp-verify-otp-btn { min-width: 92px; padding: 0 10px; }
           .rp-field-icon { left: 17px; width: 18px; height: 18px; }
           .rp-eye-btn { right: 17px; }
           .rp-foot,.rp-support { font-size: 14px; }
@@ -340,11 +460,17 @@ export default function RegisterPage() {
               <div className="rp-grid-2">
                 <div className="rp-field">
                   <label className={`rp-lbl ${focused === "ph" ? "on" : ""}`}>Phone</label>
-                  <div className="rp-iw">
-                    <span className="rp-field-icon" aria-hidden="true">
-                      <svg width="19" height="19" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.8 19.8 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.12 4.2 2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.12.9.33 1.77.62 2.6a2 2 0 0 1-.45 2.11L8 9.71a16 16 0 0 0 6.29 6.29l1.27-1.27a2 2 0 0 1 2.11-.45c.83.29 1.7.5 2.6.62A2 2 0 0 1 22 16.92Z"/></svg>
-                    </span>
-                    <input type="tel" inputMode="numeric" maxLength={10} className={`rp-inp ${error ? "err" : ""}`} value={form.ph} onChange={set("ph")} onFocus={() => setFocused("ph")} onBlur={() => setFocused("")} placeholder="Enter phone number" />
+                  <div className="rp-phone-row">
+                    <div className="rp-iw">
+                      <span className="rp-field-icon" aria-hidden="true">
+                        <svg width="19" height="19" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.8 19.8 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.12 4.2 2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.12.9.33 1.77.62 2.6a2 2 0 0 1-.45 2.11L8 9.71a16 16 0 0 0 6.29 6.29l1.27-1.27a2 2 0 0 1 2.11-.45c.83.29 1.7.5 2.6.62A2 2 0 0 1 22 16.92Z"/></svg>
+                      </span>
+                      <input type="tel" inputMode="numeric" maxLength={10} className={`rp-inp ${error ? "err" : ""}`} value={form.ph} onChange={set("ph")} onFocus={() => setFocused("ph")} onBlur={() => setFocused("")} placeholder="Enter phone number" />
+                    </div>
+                    <button type="button" className={`rp-send-otp-btn ${registrationStep === "verified" ? "verified" : ""}`}
+                      onClick={sendRegistrationOtp} disabled={otpLoading || registrationStep !== "details"}>
+                      {registrationStep === "verified" ? "✓ Verified" : registrationStep === "otp" ? "OTP Sent" : otpLoading ? "Sending..." : "Send OTP"}
+                    </button>
                   </div>
                 </div>
                 <div className="rp-field">
@@ -357,6 +483,35 @@ export default function RegisterPage() {
                   </div>
                 </div>
               </div>
+              {registrationStep === "otp" && (
+                <div className="rp-otp-panel">
+                  <div className="rp-otp-info">Enter the 6-digit code sent to your WhatsApp number.</div>
+                  <div className="rp-otp-row">
+                    <div className="rp-iw">
+                      <span className="rp-field-icon" aria-hidden="true">
+                        <svg width="19" height="19" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>
+                      </span>
+                      <input type="text" inputMode="numeric" maxLength={6} className={`rp-inp ${error ? "err" : ""}`}
+                        value={registrationOtp}
+                        onChange={(e) => { setRegistrationOtp(e.target.value.replace(/\D/g, "").slice(0, 6)); setError(""); }}
+                        onFocus={() => setFocused("registrationOtp")} onBlur={() => setFocused("")}
+                        placeholder="Enter 6-digit OTP" autoFocus autoComplete="one-time-code" />
+                    </div>
+                    <button type="button" className="rp-verify-otp-btn" onClick={verifyRegistrationOtp} disabled={otpLoading || registrationOtp.length !== 6}>
+                      {otpLoading ? "Verifying..." : "Verify"}
+                    </button>
+                  </div>
+                  <div className="rp-otp-actions">
+                    <button type="button" className="rp-text-btn" onClick={sendRegistrationOtp} disabled={otpLoading || resendCountdown > 0}>
+                      {resendCountdown > 0 ? `Resend OTP in ${resendCountdown}s` : "Resend OTP"}
+                    </button>
+                  </div>
+                </div>
+              )}
+              {registrationStep === "verified" && (
+                <div className="rp-verified-info">✓ WhatsApp number verified successfully.</div>
+              )}
+
               <div className="rp-field">
                 <label className={`rp-lbl ${focused === "password" ? "on" : ""}`}>Password</label>
                 <div className="rp-iw">
@@ -396,10 +551,13 @@ export default function RegisterPage() {
                 </div>
               )}
 
-              <button type="submit" className="rp-btn" disabled={loading}>
+              <button type="submit" className={`rp-btn ${!verificationToken ? "is-disabled" : ""}`}
+                disabled={loading} aria-disabled={!verificationToken}
+                title={!verificationToken ? "Please verify your phone number first" : "Create owner account"}>
                 {loading && <div className="rp-spin" />}
-                {loading ? "Creating account…" : "Create account →"}
+                {loading ? "Creating Account..." : "Create Owner Account"}
               </button>
+              {!verificationToken && <div className="rp-verification-hint">Please verify your phone number to enable account creation.</div>}
             </form>
 
             <p className="rp-foot">Already have an account? <Link to="/login">Sign in</Link></p>
