@@ -1090,6 +1090,18 @@ router.get("/tenant/:tenantId", auth, async (req, res) => {
     if (!tenant) return res.status(404).json({ message: "Tenant not found." });
 
     const rentDoc = await RentPayment.findOne({ tenantId: tenant._id });
+    if (rentDoc) {
+      const joiningDate = new Date(tenant.joiningDate);
+      const joiningMonth = Number.isNaN(joiningDate.getTime()) ? null : monthYearKey(joiningDate);
+      if (joiningMonth) {
+        const originalCount = rentDoc.monthlyPayments.length;
+        rentDoc.monthlyPayments = rentDoc.monthlyPayments.filter((payment) => {
+          const parsed = parseMonthYear(payment.monthYear);
+          return !parsed || parsed.key >= joiningMonth;
+        });
+        if (rentDoc.monthlyPayments.length !== originalCount) await rentDoc.save();
+      }
+    }
     const summary = await buildTenantSummary(tenant, FIVE_DAYS_MS, rentDoc);
 
     const thresholdDate = new Date(Date.now() + FIVE_DAYS_MS);

@@ -1012,6 +1012,9 @@ router.post("/short-stays/:id/convert", auth, async (req, res) => {
     tenant.rentAmount = Number(rentAmount);
     tenant.shortStayConvertedAt = new Date();
     await tenant.save();
+    // A short-stay guest must begin monthly tenancy with a clean monthly ledger.
+    // Short-stay payment history remains safely stored on the tenant document.
+    await RentPayment.deleteOne({ tenantId: tenant._id, owner: req.user.id });
     await generateFirstRentDueWithCatchUpFallback(tenant);
     await logActivity(req.user.id, "UPDATE", "Tenant", `Converted ${tenant.name} from short stay to monthly tenant`);
     res.json({ message: "Short-stay guest converted to a monthly tenant.", tenant: withOptimizedTenantDocuments(tenant) });
