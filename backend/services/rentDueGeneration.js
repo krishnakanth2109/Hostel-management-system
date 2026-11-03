@@ -161,7 +161,11 @@ export async function generateEligibleRentDues(
   now = new Date(),
   { tenantModel = Tenant, ensureDue = ensureMonthlyRentDue, logger = console } = {}
 ) {
-  const tenants = await tenantModel.find({ status: "Active", joiningDate: { $lte: now } });
+  const tenants = await tenantModel.find({
+    status: "Active",
+    tenancyType: { $ne: "short_stay" },
+    joiningDate: { $lte: now },
+  });
   let generatedCount = 0;
   const failures = [];
 

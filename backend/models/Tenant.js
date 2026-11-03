@@ -3,6 +3,13 @@ import crypto from "crypto";
 
 const createSecureId = () => crypto.randomBytes(16).toString("hex");
 
+const ShortStayPaymentEntrySchema = new mongoose.Schema({
+  amount: { type: Number, required: true, min: 0 },
+  paymentType: { type: String, enum: ["booking", "advance"], default: "booking" },
+  paidAt: { type: Date, default: Date.now },
+  note: { type: String, default: "" },
+});
+
 const TenantSchema = new mongoose.Schema(
   {
     owner: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
@@ -15,6 +22,19 @@ const TenantSchema = new mongoose.Schema(
     permanentAddress: { type: String, required: true },
     joiningDate: { type: Date, required: true },
     rentAmount: { type: Number, required: true },
+    tenancyType: {
+      type: String,
+      enum: ["monthly", "short_stay"],
+      default: "monthly",
+      index: true,
+    },
+    shortStayFrom: { type: Date, default: null },
+    shortStayTo: { type: Date, default: null },
+    shortStayPerDayAmount: { type: Number, default: null, min: 0 },
+    shortStayTotalAmount: { type: Number, default: null, min: 0 },
+    shortStayPaidAmount: { type: Number, default: 0, min: 0 },
+    shortStayPayments: { type: [ShortStayPaymentEntrySchema], default: [] },
+    shortStayConvertedAt: { type: Date, default: null },
     // ── NEW: Advance amount paid at joining (optional, defaults to 0) ──
     advanceAmount: { type: Number, default: 0 },
     paidadvanceAmount: { type: Number, default: 0 },
@@ -55,6 +75,7 @@ TenantSchema.index({ owner: 1, createdAt: -1 });
 TenantSchema.index({ owner: 1, source: 1, createdAt: -1 });
 TenantSchema.index({ owner: 1, source: 1, isVerified: 1 });
 TenantSchema.index({ owner: 1, status: 1, createdAt: -1 });
+TenantSchema.index({ owner: 1, tenancyType: 1, status: 1, shortStayTo: 1 });
 TenantSchema.index({ owner: 1, status: 1, joiningDate: 1 });
 TenantSchema.index({ owner: 1, status: 1, buildingId: 1 });
 TenantSchema.index({ owner: 1, status: 1, name: 1 });

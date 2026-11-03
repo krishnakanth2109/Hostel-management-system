@@ -38,10 +38,25 @@ const todayDateValue = () => {
 const INIT = {
   name: "", phone: "", email: "", fatherName: "", fatherPhone: "",
   permanentAddress: "",
+  tenancyType: "monthly",
   joiningDate: todayDateValue(),
   rentAmount: "",
+  shortStayFrom: todayDateValue(),
+  shortStayTo: todayDateValue(),
+  shortStayPerDayAmount: "",
   advanceAmount: "",
 };
+
+function getShortStaySummary(from, to, perDayAmount) {
+  if (!from || !to) return { days: 0, total: 0 };
+  const start = new Date(`${from}T00:00:00`);
+  const end = new Date(`${to}T00:00:00`);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end < start) {
+    return { days: 0, total: 0 };
+  }
+  const days = Math.floor((end - start) / 86400000) + 1;
+  return { days, total: days * Math.max(0, Number(perDayAmount || 0)) };
+}
 
 const HOSTEL_RULES = [
   { title: "Maintain Cleanliness", text: "Keep your room and common areas clean." },
@@ -388,14 +403,25 @@ if (!form.email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) {
   }
 
   // ✅ Joining Date
-  if (!form.joiningDate) {
-    errors.joiningDate = "Required";
-  } else if (form.joiningDate > todayDateValue()) {
-    errors.joiningDate = "Future joining dates are not allowed";
+  if (form.tenancyType === "short_stay") {
+    if (!form.shortStayFrom) errors.shortStayFrom = "From date is required";
+    if (!form.shortStayTo) errors.shortStayTo = "To date is required";
+    if (form.shortStayFrom && form.shortStayTo && form.shortStayTo < form.shortStayFrom) {
+      errors.shortStayTo = "To date cannot be before from date";
+    }
+    if (!form.shortStayPerDayAmount || Number(form.shortStayPerDayAmount) <= 0) {
+      errors.shortStayPerDayAmount = "Enter a valid per-day amount";
+    }
+  } else {
+    if (!form.joiningDate) {
+      errors.joiningDate = "Required";
+    } else if (form.joiningDate > todayDateValue()) {
+      errors.joiningDate = "Future joining dates are not allowed";
+    }
   }
 
   // ✅ Rent Amount (> 0)
-  if (!form.rentAmount || Number(form.rentAmount) <= 0) {
+  if (form.tenancyType === "monthly" && (!form.rentAmount || Number(form.rentAmount) <= 0)) {
     errors.rentAmount = "Invalid amount";
   }
 
@@ -447,8 +473,18 @@ if (!form.email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) {
     if (form.fatherName) fd.append("fatherName", form.fatherName.trim());
     if (form.fatherPhone) fd.append("fatherPhone", form.fatherPhone.trim());
     fd.append("permanentAddress", form.permanentAddress.trim());
-    fd.append("joiningDate", form.joiningDate);
-    fd.append("rentAmount", form.rentAmount);
+    fd.append("tenancyType", form.tenancyType);
+    if (form.tenancyType === "short_stay") {
+      const shortStay = getShortStaySummary(form.shortStayFrom, form.shortStayTo, form.shortStayPerDayAmount);
+      fd.append("shortStayFrom", form.shortStayFrom);
+      fd.append("shortStayTo", form.shortStayTo);
+      fd.append("shortStayPerDayAmount", form.shortStayPerDayAmount);
+      fd.append("joiningDate", form.shortStayFrom);
+      fd.append("rentAmount", String(shortStay.total));
+    } else {
+      fd.append("joiningDate", form.joiningDate);
+      fd.append("rentAmount", form.rentAmount);
+    }
     // Advance: send 0 if blank
     fd.append("advanceAmount", form.advanceAmount ? String(Number(form.advanceAmount)) : "0");
     fd.append("buildingId", selBuilding);
@@ -581,7 +617,10 @@ const set = k => e => {
     const selectedFloor = selectedBuilding?.floors?.find((floor) => floor._id === selFloor);
     const selectedRoom = selectedFloor?.rooms?.find((room) => room._id === selRoom);
     const selectedBed = selectedRoom?.beds?.find((bed) => bed._id === selBed) || availBeds.find((bed) => bed._id === selBed);
-    const rentDues = getRentDueBreakdown(form.joiningDate, form.rentAmount);
+    const shortStay = getShortStaySummary(form.shortStayFrom, form.shortStayTo, form.shortStayPerDayAmount);
+    const rentDues = form.tenancyType === "short_stay"
+      ? { pendingFrom: `${formatDate(form.shortStayFrom)} to ${formatDate(form.shortStayTo)}`, total: shortStay.total, months: [] }
+      : getRentDueBreakdown(form.joiningDate, form.rentAmount);
     const propertyName = selectedBuilding?.buildingName || "Not provided";
     const roomNumber = selectedRoom?.roomNumber ? `Room ${selectedRoom.roomNumber}` : "Room not provided";
     const bedNumber = selectedBed?.bedNumber ? `Bed ${selectedBed.bedNumber}` : "Bed not provided";
@@ -591,7 +630,7 @@ const set = k => e => {
       { icon: Mail, label: "Email", value: form.email || "Not provided" },
       { icon: Home, label: "Property / Hostel Name", value: selectedBuilding?.buildingName || "Not provided" },
       { icon: BedDouble, label: "Your Bed Loc", value: `${propertyName} / ${roomNumber} / ${bedNumber}` },
-      { icon: CalendarDays, label: "Joining Date", value: formatDate(form.joiningDate) },
+      { icon: CalendarDays, label: form.tenancyType === "short_stay" ? "Stay Dates" : "Joining Date", value: form.tenancyType === "short_stay" ? `${formatDate(form.shortStayFrom)} to ${formatDate(form.shortStayTo)} (${shortStay.days} days)` : formatDate(form.joiningDate) },
     ];
 
     return (
@@ -652,18 +691,18 @@ const set = k => e => {
                   <IndianRupee size={20} strokeWidth={2.5} />
                 </div>
                 <div>
-                  <h2 style={{ ...sectionTitleStyle, color: "#7c2d12" }}>Rent Dues</h2>
-                  <p style={sectionSubStyle}>Based on the date you selected, your pending rent details are shown below.</p>
+                  <h2 style={{ ...sectionTitleStyle, color: "#7c2d12" }}>{form.tenancyType === "short_stay" ? "Short Stay Rent" : "Rent Dues"}</h2>
+                  <p style={sectionSubStyle}>{form.tenancyType === "short_stay" ? "Calculated from the selected stay dates and per-day amount." : "Based on the date you selected, your pending rent details are shown below."}</p>
                 </div>
               </div>
 
               <div className="rent-summary-grid" style={rentSummaryStyle}>
                 <div className="rent-summary-cell" style={rentSummaryCellStyle}>
-                  <span style={rentSummaryLabelStyle}>Pending Rent From</span>
+                  <span style={rentSummaryLabelStyle}>{form.tenancyType === "short_stay" ? "Stay Period" : "Pending Rent From"}</span>
                   <strong style={rentSummaryValueStyle}>{rentDues.pendingFrom}</strong>
                 </div>
                 <div className="rent-summary-cell" style={rentSummaryCellStyle}>
-                  <span style={rentSummaryLabelStyle}>Total Pending Rent</span>
+                  <span style={rentSummaryLabelStyle}>{form.tenancyType === "short_stay" ? "Total Booking Rent" : "Total Pending Rent"}</span>
                   <strong style={rentAmountStyle}>{formatINR(rentDues.total)}</strong>
                 </div>
               </div>
@@ -951,6 +990,17 @@ const set = k => e => {
 
               <SectionLabel>Tenancy Details</SectionLabel>
 
+              <Field label="Due Type *">
+                <select value={form.tenancyType} onChange={set("tenancyType")} style={selStyle}>
+                  <option value="monthly">Monthly</option>
+                  <option value="short_stay">Day Wise (Short Stay)</option>
+                </select>
+                <span style={{ fontSize: 11, color: "#94a3b8", marginTop: 4 }}>
+                  Monthly is selected by default. Choose day wise only for a fixed short stay.
+                </span>
+              </Field>
+
+              {form.tenancyType === "monthly" ? (
               <TwoCol>
                 <DuesStartDateCard error={fieldErrors.joiningDate}>
                   <FocusInput
@@ -965,6 +1015,34 @@ const set = k => e => {
                   <FocusInput type="number" placeholder="e.g. 5000" value={form.rentAmount} onChange={set("rentAmount")} min="1" />
                 </Field>
               </TwoCol>
+              ) : (
+                <div style={{ display: "grid", gap: 12 }}>
+                  <TwoCol>
+                    <Field label="Stay From *">
+                      <FocusInput type="date" value={form.shortStayFrom} onChange={set("shortStayFrom")} />
+                      {fieldErrors.shortStayFrom && <span style={{ color: "#dc2626", fontSize: 11 }}>{fieldErrors.shortStayFrom}</span>}
+                    </Field>
+                    <Field label="Stay To *">
+                      <FocusInput type="date" value={form.shortStayTo} onChange={set("shortStayTo")} min={form.shortStayFrom || undefined} />
+                      {fieldErrors.shortStayTo && <span style={{ color: "#dc2626", fontSize: 11 }}>{fieldErrors.shortStayTo}</span>}
+                    </Field>
+                  </TwoCol>
+                  <TwoCol>
+                    <Field label="Per Day Amount (₹) *">
+                      <FocusInput type="number" placeholder="e.g. 750" value={form.shortStayPerDayAmount} onChange={set("shortStayPerDayAmount")} min="1" />
+                      {fieldErrors.shortStayPerDayAmount && <span style={{ color: "#dc2626", fontSize: 11 }}>{fieldErrors.shortStayPerDayAmount}</span>}
+                    </Field>
+                    <Field label="Total Short Stay Rent">
+                      <div style={{ ...inp, background: "#f8fafc", color: "#0f172a", fontWeight: 800, display: "flex", alignItems: "center" }}>
+                        {formatINR(getShortStaySummary(form.shortStayFrom, form.shortStayTo, form.shortStayPerDayAmount).total)}
+                        <span style={{ marginLeft: 8, fontSize: 11, color: "#64748b", fontWeight: 600 }}>
+                          ({getShortStaySummary(form.shortStayFrom, form.shortStayTo, form.shortStayPerDayAmount).days} day(s))
+                        </span>
+                      </div>
+                    </Field>
+                  </TwoCol>
+                </div>
+              )}
 
               {/* ── NEW: Advance Amount ── */}
               <Field label="Advance Amount (₹) — Optional">

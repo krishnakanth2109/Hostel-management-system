@@ -191,6 +191,110 @@ const advanceAmountUpdatedEmailHtml = ({ tenant, previousAdvance, newAdvance, pa
 </html>`;
 };
 
+const escapeEmailText = (value) => String(value ?? "")
+  .replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;")
+  .replaceAll('"', "&quot;").replaceAll("'", "&#039;");
+
+const shortStayMoney = (value) => new Intl.NumberFormat("en-IN", {
+  style: "currency", currency: "INR", maximumFractionDigits: 2,
+}).format(Number(value || 0));
+
+const shortStayEmailDate = (value) => new Date(value).toLocaleDateString("en-IN", {
+  day: "2-digit", month: "short", year: "numeric", timeZone: "Asia/Kolkata",
+});
+
+function shortStayEmailLayout({ tenant, title, intro, accent, badge, amountLabel, amount, rows, footer }) {
+  const safeName = escapeEmailText(tenant.name);
+  return `<!doctype html><html><body style="margin:0;background:#f1f5f9;font-family:Segoe UI,Arial,sans-serif;color:#0f172a">
+    <table width="100%" cellpadding="0" cellspacing="0" role="presentation"><tr><td align="center" style="padding:32px 14px">
+      <table width="560" cellpadding="0" cellspacing="0" role="presentation" style="max-width:560px;width:100%;background:#fff;border-radius:18px;overflow:hidden;box-shadow:0 12px 36px rgba(15,23,42,.12)">
+        <tr><td style="background:${accent};padding:28px 30px;color:#fff"><div style="font-size:12px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;opacity:.85">Nilayam · Short Stay</div><h1 style="margin:8px 0 0;font-size:23px">${title}</h1></td></tr>
+        <tr><td style="padding:28px 30px"><p style="margin:0 0 9px;font-size:17px;font-weight:800">Hello ${safeName},</p><p style="margin:0;color:#475569;font-size:14px;line-height:1.7">${intro}</p>
+          <div style="margin:22px 0;background:#f8fafc;border:1px solid #e2e8f0;border-radius:14px;padding:20px;text-align:center"><div style="font-size:11px;font-weight:800;color:#64748b;text-transform:uppercase;letter-spacing:.08em">${amountLabel}</div><div style="margin:7px 0;font-size:30px;font-weight:900;color:${accent}">${shortStayMoney(amount)}</div><span style="display:inline-block;border-radius:999px;background:${accent}18;color:${accent};padding:6px 11px;font-size:11px;font-weight:800">${badge}</span></div>
+          <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="width:100%;border:1px solid #e2e8f0;border-radius:14px;border-collapse:separate;border-spacing:0;overflow:hidden;background:#ffffff">${rows.map(([label, value], index) => `<tr><td width="46%" valign="top" style="width:46%;padding:13px 16px;color:#64748b;font-size:13px;line-height:1.45;border-bottom:${index < rows.length - 1 ? "1px solid #eef2f7" : "0"};">${escapeEmailText(label)}</td><td width="54%" valign="top" align="right" style="width:54%;padding:13px 16px 13px 24px;color:#0f172a;font-size:13px;font-weight:700;line-height:1.45;text-align:right;word-break:break-word;border-bottom:${index < rows.length - 1 ? "1px solid #eef2f7" : "0"};">${escapeEmailText(value)}</td></tr>`).join("")}</table>
+          <p style="margin:20px 0 0;padding:13px 14px;background:#f8fafc;border-radius:10px;color:#64748b;font-size:12px;line-height:1.6">${footer}</p>
+        </td></tr><tr><td style="padding:15px;text-align:center;background:#f8fafc;color:#94a3b8;font-size:11px">Automated email from Nilayam Hostel Management</td></tr>
+      </table></td></tr></table></body></html>`;
+}
+
+function shortStayPaymentEmail({ tenant, paymentAmount, paymentType, note }) {
+  const total = Number(tenant.shortStayTotalAmount || 0);
+  const paid = Number(tenant.shortStayPaidAmount || 0);
+  const rentDue = Math.max(0, total - paid);
+  const advanceAmount = Number(tenant.advanceAmount || 0);
+  const paidAdvance = Number(tenant.paidadvanceAmount || 0);
+  const advanceDue = Math.max(0, advanceAmount - paidAdvance);
+  const due = rentDue + advanceDue;
+  const fullyPaid = due <= 0;
+  const paymentLabel = paymentType === "advance" ? "Advance payment" : "Booking rent payment";
+  return {
+    subject: fullyPaid
+      ? `Short Stay Payment Complete - ${shortStayMoney(total)}`
+      : `Short Stay Payment Received - ${shortStayMoney(due)} Remaining`,
+    html: shortStayEmailLayout({
+      tenant,
+      title: fullyPaid ? "Payment received in full" : "Payment received",
+      intro: `We have received your ${paymentLabel.toLowerCase()} of <strong>${shortStayMoney(paymentAmount)}</strong>. ${fullyPaid ? "Your booking and advance payments are now fully settled." : `A total balance of <strong>${shortStayMoney(due)}</strong> is still pending.`}`,
+      accent: fullyPaid ? "#059669" : "#d97706",
+      badge: fullyPaid ? "Paid in full" : "Partially paid",
+      amountLabel: paymentLabel,
+      amount: paymentAmount,
+      rows: [
+        ["Stay period", `${shortStayEmailDate(tenant.shortStayFrom)} to ${shortStayEmailDate(tenant.shortStayTo)}`],
+        ["Per-day amount", shortStayMoney(tenant.shortStayPerDayAmount)],
+        ["Booking total", shortStayMoney(total)],
+        ["Booking rent paid", shortStayMoney(paid)],
+        ["Booking rent due", shortStayMoney(rentDue)],
+        ["Advance required", shortStayMoney(advanceAmount)],
+        ["Advance paid", shortStayMoney(paidAdvance)],
+        ["Advance due", shortStayMoney(advanceDue)],
+        ["Total outstanding", shortStayMoney(due)],
+        ["Payment note", note || "Short-stay payment"],
+      ],
+      footer: "Please keep this email as your short-stay payment record.",
+    }),
+  };
+}
+
+function shortStayReminderEmail(tenant) {
+  const total = Number(tenant.shortStayTotalAmount || 0);
+  const paid = Number(tenant.shortStayPaidAmount || 0);
+  const rentDue = Math.max(0, total - paid);
+  const advanceAmount = Number(tenant.advanceAmount || 0);
+  const paidAdvance = Number(tenant.paidadvanceAmount || 0);
+  const advanceDue = Math.max(0, advanceAmount - paidAdvance);
+  const due = rentDue + advanceDue;
+  const rows = [
+    ["Stay period", `${shortStayEmailDate(tenant.shortStayFrom)} to ${shortStayEmailDate(tenant.shortStayTo)}`],
+    ["Per-day amount", shortStayMoney(tenant.shortStayPerDayAmount)],
+    ["Booking total", shortStayMoney(total)],
+    ["Booking rent paid", shortStayMoney(paid)],
+    ["Booking rent due", shortStayMoney(rentDue)],
+  ];
+  if (advanceAmount > 0) {
+    rows.push(
+      ["Advance required", shortStayMoney(advanceAmount)],
+      ["Advance paid", shortStayMoney(paidAdvance)],
+      ["Advance due", shortStayMoney(advanceDue)],
+    );
+  }
+  rows.push(["Total amount due", shortStayMoney(due)]);
+  return {
+    subject: `Short Stay Payment Reminder - ${shortStayMoney(due)} Due`,
+    html: shortStayEmailLayout({
+      tenant,
+      title: "Short-stay payment reminder",
+      intro: `This is a friendly reminder that <strong>${shortStayMoney(due)}</strong> is pending for your short-stay booking. Please complete the payment at your earliest convenience.`,
+      accent: "#dc2626",
+      badge: "Payment due",
+      amountLabel: "Amount pending",
+      amount: due,
+      rows,
+      footer: "If you have already completed this payment, please contact your hostel manager.",
+    }),
+  };
+}
+
 router.post("/send-email-otp", async (req, res) => {
   try {
     const { email, name } = req.body;
@@ -359,6 +463,21 @@ function parseJoiningDate(joiningDate) {
       ? `${joiningDate}T00:00:00`
       : joiningDate);
   return Number.isNaN(value.getTime()) ? null : value;
+}
+
+function shortStayDetails({ shortStayFrom, shortStayTo, shortStayPerDayAmount }) {
+  const from = parseJoiningDate(shortStayFrom);
+  const to = parseJoiningDate(shortStayTo);
+  const perDayAmount = Number(shortStayPerDayAmount);
+  if (!from || !to) return { error: "Enter valid short-stay from and to dates." };
+  const fromDay = Date.UTC(from.getUTCFullYear(), from.getUTCMonth(), from.getUTCDate());
+  const toDay = Date.UTC(to.getUTCFullYear(), to.getUTCMonth(), to.getUTCDate());
+  if (toDay < fromDay) return { error: "Short-stay to date cannot be before the from date." };
+  if (!Number.isFinite(perDayAmount) || perDayAmount <= 0) {
+    return { error: "Enter a valid per-day amount." };
+  }
+  const totalDays = Math.floor((toDay - fromDay) / 86400000) + 1;
+  return { from, to, perDayAmount, totalDays, totalAmount: totalDays * perDayAmount };
 }
 
 function monthIndex(date) {
@@ -582,6 +701,7 @@ router.post("/register-via-link", upload.fields([{ name: "aadharFront", maxCount
       const {
         linkToken, name, phone, email, fatherName, fatherPhone, permanentAddress,
         joiningDate, rentAmount, advanceAmount, buildingId, floorId, roomId, bedId,
+        tenancyType = "monthly", shortStayFrom, shortStayTo, shortStayPerDayAmount,
       } = req.body;
 
       let ownerId;
@@ -595,12 +715,28 @@ router.post("/register-via-link", upload.fields([{ name: "aadharFront", maxCount
       if (!ownerId) return res.status(401).json({ message: "Invalid link." });
 
       // ✅ RESTORED: Input Validation
-      if (!name || !phone || !permanentAddress || !joiningDate || !rentAmount) {
+      const isShortStay = tenancyType === "short_stay";
+      const shortStay = isShortStay
+        ? shortStayDetails({ shortStayFrom, shortStayTo, shortStayPerDayAmount })
+        : null;
+      if (!name || !phone || !permanentAddress || (!isShortStay && (!joiningDate || !rentAmount))) {
         return res.status(400).json({ message: "name, phone, permanentAddress, joiningDate, rentAmount are required." });
       }
-      if (isFutureJoiningDate(joiningDate)) {
+      if (shortStay?.error) return res.status(400).json({ message: shortStay.error });
+      if (!isShortStay && isFutureJoiningDate(joiningDate)) {
         return res.status(400).json({ message: "Joining date cannot be in the future." });
       }
+
+      const resolvedJoiningDate = isShortStay ? shortStay.from : joiningDate;
+      const resolvedRentAmount = isShortStay ? shortStay.totalAmount : Number(rentAmount);
+      const bookingFields = isShortStay ? {
+        tenancyType: "short_stay",
+        shortStayFrom: shortStay.from,
+        shortStayTo: shortStay.to,
+        shortStayPerDayAmount: shortStay.perDayAmount,
+        shortStayTotalAmount: shortStay.totalAmount,
+        shortStayPaidAmount: 0,
+      } : { tenancyType: "monthly" };
 
       const documents = await resolveDocUrls(req.files);
       const advance = advanceAmount && Number(advanceAmount) > 0 ? Number(advanceAmount) : 0;
@@ -625,12 +761,12 @@ router.post("/register-via-link", upload.fields([{ name: "aadharFront", maxCount
 
         const tenant = new Tenant({
           owner: ownerId, name: name.trim(), phone: phone.trim(), email, fatherName, fatherPhone,
-          permanentAddress: permanentAddress.trim(), joiningDate, rentAmount: Number(rentAmount),
+          permanentAddress: permanentAddress.trim(), joiningDate: resolvedJoiningDate, rentAmount: resolvedRentAmount,
           advanceAmount: advance, paidadvanceAmount: 0, documents, buildingId, floorId, roomId, bedId, allocationInfo,
-          source: "onboarding-link", isVerified: false
+          source: "onboarding-link", isVerified: false, ...bookingFields,
         });
         await tenant.save();
-        await generateFirstRentDueWithCatchUpFallback(tenant);
+        if (!isShortStay) await generateFirstRentDueWithCatchUpFallback(tenant);
 
         bed.status = "Occupied"; bed.tenantId = tenant._id;
         await building.save();
@@ -647,11 +783,12 @@ router.post("/register-via-link", upload.fields([{ name: "aadharFront", maxCount
 
       const tenant = new Tenant({
         owner: ownerId, name: name.trim(), phone: phone.trim(), email, fatherName, fatherPhone,
-        permanentAddress: permanentAddress.trim(), joiningDate, rentAmount: Number(rentAmount),
-        advanceAmount: advance, paidadvanceAmount: 0, documents, source: "onboarding-link", isVerified: false
+        permanentAddress: permanentAddress.trim(), joiningDate: resolvedJoiningDate, rentAmount: resolvedRentAmount,
+        advanceAmount: advance, paidadvanceAmount: 0, documents, source: "onboarding-link", isVerified: false,
+        ...bookingFields,
       });
       await tenant.save();
-      await generateFirstRentDueWithCatchUpFallback(tenant);
+      if (!isShortStay) await generateFirstRentDueWithCatchUpFallback(tenant);
       await logActivity(ownerId, "ONBOARD", "Tenant", `New registration: ${name} (Waiting for room)`);
 
       await notifyOwnerOnboarding(ownerId, tenant);
@@ -686,6 +823,201 @@ router.patch("/mark-verified", auth, async (req, res) => {
     await Tenant.updateMany({ owner: req.user.id, source: "onboarding-link", isVerified: false }, { $set: { isVerified: true } });
     res.json({ message: "Marked verified." });
   } catch (err) { res.status(500).json({ message: "Server error." }); }
+});
+
+const shortStayResponse = (tenant) => {
+  const item = withOptimizedTenantDocuments(tenant, {
+    passportWidth: CLOUDINARY_IMAGE_WIDTHS.card,
+    passportHeight: CLOUDINARY_IMAGE_WIDTHS.card,
+    passportCrop: "fill",
+    documentWidth: CLOUDINARY_IMAGE_WIDTHS.documentThumb,
+  });
+  const totalAmount = Number(item.shortStayTotalAmount || item.rentAmount || 0);
+  const paidAmount = Math.min(totalAmount, Math.max(0, Number(item.shortStayPaidAmount || 0)));
+  const advanceAmount = Math.max(0, Number(item.advanceAmount || 0));
+  const paidAdvanceAmount = Math.min(advanceAmount, Math.max(0, Number(item.paidadvanceAmount || 0)));
+  const rentDueAmount = Math.max(0, totalAmount - paidAmount);
+  const advancePending = Math.max(0, advanceAmount - paidAdvanceAmount);
+  const totalOutstanding = rentDueAmount + advancePending;
+  return {
+    ...item,
+    shortStayTotalAmount: totalAmount,
+    shortStayPaidAmount: paidAmount,
+    shortStayRentDueAmount: rentDueAmount,
+    advancePending,
+    totalOutstanding,
+    shortStayDueAmount: totalOutstanding,
+    shortStayPaymentStatus: totalOutstanding <= 0 ? "Paid" : (paidAmount > 0 || paidAdvanceAmount > 0) ? "Partial" : "Due",
+  };
+};
+
+router.get("/short-stays", auth, async (req, res) => {
+  try {
+    const filter = { owner: req.user.id, tenancyType: "short_stay" };
+    if (req.query.status) filter.status = req.query.status;
+    const tenants = await Tenant.find(filter).sort({ shortStayFrom: -1, createdAt: -1 }).lean();
+    res.json(tenants.map(shortStayResponse));
+  } catch (err) {
+    res.status(500).json({ message: "Unable to load short-stay bookings.", error: err.message });
+  }
+});
+
+router.patch("/short-stays/:id", auth, async (req, res) => {
+  try {
+    const tenant = await Tenant.findOne({
+      _id: req.params.id, owner: req.user.id, tenancyType: "short_stay",
+    });
+    if (!tenant) return res.status(404).json({ message: "Short-stay booking not found." });
+
+    const allowed = ["name", "phone", "email", "fatherName", "fatherPhone", "permanentAddress", "advanceAmount"];
+    for (const key of allowed) {
+      if (Object.prototype.hasOwnProperty.call(req.body, key)) tenant[key] = req.body[key];
+    }
+    const shortStay = shortStayDetails({
+      shortStayFrom: req.body.shortStayFrom || tenant.shortStayFrom,
+      shortStayTo: req.body.shortStayTo || tenant.shortStayTo,
+      shortStayPerDayAmount: req.body.shortStayPerDayAmount ?? tenant.shortStayPerDayAmount,
+    });
+    if (shortStay.error) return res.status(400).json({ message: shortStay.error });
+    if (Object.prototype.hasOwnProperty.call(req.body, "shortStayTotalAmount")) {
+      const requestedTotal = Number(req.body.shortStayTotalAmount);
+      if (!Number.isFinite(requestedTotal) || requestedTotal <= 0) {
+        return res.status(400).json({ message: "Enter a valid short-stay total amount." });
+      }
+      shortStay.totalAmount = requestedTotal;
+      shortStay.perDayAmount = requestedTotal / shortStay.totalDays;
+    }
+    if (Number(tenant.shortStayPaidAmount || 0) > shortStay.totalAmount) {
+      return res.status(400).json({ message: "Booking total cannot be less than the amount already paid." });
+    }
+    tenant.shortStayFrom = shortStay.from;
+    tenant.shortStayTo = shortStay.to;
+    tenant.shortStayPerDayAmount = shortStay.perDayAmount;
+    tenant.shortStayTotalAmount = shortStay.totalAmount;
+    tenant.joiningDate = shortStay.from;
+    tenant.rentAmount = shortStay.totalAmount;
+    await tenant.save();
+    await logActivity(req.user.id, "UPDATE", "Tenant", `Updated short stay for ${tenant.name}`);
+    res.json({ message: "Short-stay booking updated.", tenant: shortStayResponse(tenant.toObject()) });
+  } catch (err) {
+    res.status(500).json({ message: "Unable to update short-stay booking.", error: err.message });
+  }
+});
+
+router.post("/short-stays/:id/extend", auth, async (req, res) => {
+  try {
+    const tenant = await Tenant.findOne({
+      _id: req.params.id, owner: req.user.id, tenancyType: "short_stay", status: "Active",
+    });
+    if (!tenant) return res.status(404).json({ message: "Active short-stay booking not found." });
+    const shortStay = shortStayDetails({
+      shortStayFrom: tenant.shortStayFrom,
+      shortStayTo: req.body.shortStayTo,
+      shortStayPerDayAmount: req.body.shortStayPerDayAmount ?? tenant.shortStayPerDayAmount,
+    });
+    if (shortStay.error) return res.status(400).json({ message: shortStay.error });
+    if (shortStay.to <= tenant.shortStayTo) {
+      return res.status(400).json({ message: "Extended stay date must be after the current to date." });
+    }
+    tenant.shortStayTo = shortStay.to;
+    tenant.shortStayPerDayAmount = shortStay.perDayAmount;
+    tenant.shortStayTotalAmount = shortStay.totalAmount;
+    tenant.rentAmount = shortStay.totalAmount;
+    await tenant.save();
+    await logActivity(req.user.id, "UPDATE", "Tenant", `Extended short stay for ${tenant.name}`);
+    res.json({ message: "Stay extended successfully.", tenant: shortStayResponse(tenant.toObject()) });
+  } catch (err) {
+    res.status(500).json({ message: "Unable to extend stay.", error: err.message });
+  }
+});
+
+router.post("/short-stays/:id/pay", auth, async (req, res) => {
+  try {
+    const amount = Number(req.body.amount);
+    if (!Number.isFinite(amount) || amount <= 0) return res.status(400).json({ message: "Enter a valid payment amount." });
+    const tenant = await Tenant.findOne({
+      _id: req.params.id, owner: req.user.id, tenancyType: "short_stay",
+    });
+    if (!tenant) return res.status(404).json({ message: "Short-stay booking not found." });
+    const paymentType = req.body.paymentType === "advance" ? "advance" : "booking";
+    const due = paymentType === "advance"
+      ? Math.max(0, Number(tenant.advanceAmount || 0) - Number(tenant.paidadvanceAmount || 0))
+      : Math.max(0, Number(tenant.shortStayTotalAmount || 0) - Number(tenant.shortStayPaidAmount || 0));
+    if (due <= 0) return res.status(400).json({ message: paymentType === "advance" ? "Advance is already fully paid." : "Booking rent is already fully paid." });
+    if (amount > due) return res.status(400).json({ message: `Payment cannot exceed the due amount of ₹${due}.` });
+    if (paymentType === "advance") tenant.paidadvanceAmount = Number(tenant.paidadvanceAmount || 0) + amount;
+    else tenant.shortStayPaidAmount = Number(tenant.shortStayPaidAmount || 0) + amount;
+    tenant.shortStayPayments.push({ amount, paymentType, note: String(req.body.note || ""), paidAt: new Date() });
+    await tenant.save();
+    await logActivity(req.user.id, "PAYMENT", "Rent", `Received short-stay payment of ₹${amount} from ${tenant.name}`);
+    let emailSent = false;
+    let emailWarning = "";
+    if (tenant.email) {
+      try {
+        const email = shortStayPaymentEmail({ tenant, paymentAmount: amount, paymentType, note: req.body.note });
+        await sendBrevoEmail(tenant.email, tenant.name, email.subject, email.html);
+        emailSent = true;
+      } catch (emailError) {
+        emailWarning = "Payment was recorded, but the receipt email could not be sent.";
+        console.error("Short-stay payment email failed:", emailError.message);
+      }
+    } else {
+      emailWarning = "Payment was recorded, but this guest has no email address.";
+    }
+    res.json({
+      message: emailSent ? `Payment recorded and receipt sent to ${tenant.email}.` : "Payment recorded.",
+      emailSent,
+      emailWarning,
+      tenant: shortStayResponse(tenant.toObject()),
+    });
+  } catch (err) {
+    res.status(500).json({ message: "Unable to record payment.", error: err.message });
+  }
+});
+
+router.post("/short-stays/:id/remind", auth, async (req, res) => {
+  try {
+    const tenant = await Tenant.findOne({
+      _id: req.params.id, owner: req.user.id, tenancyType: "short_stay",
+    });
+    if (!tenant) return res.status(404).json({ message: "Short-stay booking not found." });
+    if (!tenant.email) return res.status(422).json({ message: "This guest has no email address." });
+    const due = Math.max(0, Number(tenant.shortStayTotalAmount || 0) - Number(tenant.shortStayPaidAmount || 0))
+      + Math.max(0, Number(tenant.advanceAmount || 0) - Number(tenant.paidadvanceAmount || 0));
+    if (due <= 0) return res.status(400).json({ message: "This short-stay booking is already fully paid." });
+    const email = shortStayReminderEmail(tenant);
+    await sendBrevoEmail(tenant.email, tenant.name, email.subject, email.html);
+    await logActivity(req.user.id, "REMINDER", "Rent", `Sent short-stay payment reminder to ${tenant.name}`);
+    res.json({ message: `Payment reminder sent to ${tenant.email}.` });
+  } catch (err) {
+    res.status(500).json({ message: "Unable to send reminder email.", error: err.message });
+  }
+});
+
+router.post("/short-stays/:id/convert", auth, async (req, res) => {
+  try {
+    const { joiningDate, rentAmount } = req.body;
+    if (!parseJoiningDate(joiningDate) || isFutureJoiningDate(joiningDate)) {
+      return res.status(400).json({ message: "Enter a valid joining date that is not in the future." });
+    }
+    if (!Number.isFinite(Number(rentAmount)) || Number(rentAmount) <= 0) {
+      return res.status(400).json({ message: "Enter a valid monthly rent amount." });
+    }
+    const tenant = await Tenant.findOne({
+      _id: req.params.id, owner: req.user.id, tenancyType: "short_stay", status: "Active",
+    });
+    if (!tenant) return res.status(404).json({ message: "Active short-stay booking not found." });
+    tenant.tenancyType = "monthly";
+    tenant.joiningDate = parseJoiningDate(joiningDate);
+    tenant.rentAmount = Number(rentAmount);
+    tenant.shortStayConvertedAt = new Date();
+    await tenant.save();
+    await generateFirstRentDueWithCatchUpFallback(tenant);
+    await logActivity(req.user.id, "UPDATE", "Tenant", `Converted ${tenant.name} from short stay to monthly tenant`);
+    res.json({ message: "Short-stay guest converted to a monthly tenant.", tenant: withOptimizedTenantDocuments(tenant) });
+  } catch (err) {
+    res.status(500).json({ message: "Unable to convert tenant.", error: err.message });
+  }
 });
 
 // Admin Add Tenant (Restored Validation & Bed Check)
@@ -752,6 +1084,8 @@ router.get("/", auth, async (req, res) => {
   try {
     const filter = { owner: req.user.id };
     if (req.query.source) filter.source = req.query.source;
+    if (req.query.tenancyType) filter.tenancyType = req.query.tenancyType;
+    else filter.tenancyType = { $ne: "short_stay" };
     const tenants = await Tenant.find(filter).sort({ createdAt: -1 }).lean();
     res.json(tenants.map((tenant) => withOptimizedTenantDocuments(tenant, {
       passportWidth: CLOUDINARY_IMAGE_WIDTHS.card,

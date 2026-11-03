@@ -24,6 +24,7 @@ import {
   EyeOff,
   Mail ,
   History ,
+  CalendarClock,
   // UserPlus ,
   
 } from "lucide-react";
@@ -32,6 +33,7 @@ import { resolveOptimizedMediaUrl } from "../utils/cloudinaryDelivery.js";
 const NAV = [
   { to: "/dashboard",          label: "Dashboard",           icon: <LayoutDashboard size={20} /> },
   { to: "/rent-management",    label: "Rent Management",     icon: <ReceiptIndianRupee size={20} /> },
+  { to: "/short-stay-bookings", label: "Short Stay Booking",  icon: <CalendarClock size={20} /> },
   { to: "/payment-requests",   label: "Payment Requests",    icon: <CreditCard size={20} /> },
   { to: "/addcandidate",       label: "Add Candidate",       icon: <UserPlus size={20} /> },
   { to: "/candidates",         label: "Total Candidates",    icon: <Users size={20} /> },

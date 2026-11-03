@@ -798,7 +798,7 @@ router.get("/due", auth, async (req, res) => {
     const limit = Math.min(50, Math.max(1, parseInt(req.query.limit) || 10));
 
     const tenants = await Tenant.find(
-      { owner: req.user.id, status: "Active" },
+      { owner: req.user.id, status: "Active", tenancyType: { $ne: "short_stay" } },
       {
         _id: 1, name: 1, phone: 1, email: 1, joiningDate: 1, rentAmount: 1, advanceAmount: 1, paidadvanceAmount: 1,
         buildingId: 1, floorId: 1, roomId: 1, bedId: 1,
@@ -865,6 +865,7 @@ router.get("/due/search", auth, async (req, res) => {
     const tenants = await Tenant.find({
       owner: req.user.id,
       status: "Active",
+      tenancyType: { $ne: "short_stay" },
       name: { $regex: q, $options: "i" },
     }).lean();
 
@@ -961,6 +962,7 @@ router.get("/monthly-summary", auth, async (req, res) => {
     const tenants = await Tenant.find({
       owner: req.user.id,
       status: "Active",
+      tenancyType: { $ne: "short_stay" },
       joiningDate: { $lte: monthEnd },
     }).lean();
 
@@ -1028,7 +1030,7 @@ router.get("/monthly-summary", auth, async (req, res) => {
 
 router.get("/all", auth, async (req, res) => {
   try {
-    const tenants = await Tenant.find({ owner: req.user.id, status: "Active" }).lean();
+    const tenants = await Tenant.find({ owner: req.user.id, status: "Active", tenancyType: { $ne: "short_stay" } }).lean();
     const results = (await buildTenantSummaries(tenants, FIVE_DAYS_MS))
       .map(({ tenant, ...summary }) => ({
         tenant: withOptimizedTenantDocuments(tenant, {
@@ -1060,9 +1062,9 @@ router.get("/search", auth, async (req, res) => {
           for (const r of f.rooms)
             if (r.roomNumber.toLowerCase().includes(q.toLowerCase()))
               r.beds.forEach((bed) => { if (bed.tenantId) matchedBedIds.push(bed.tenantId.toString()); });
-      tenants = await Tenant.find({ owner: req.user.id, status: "Active", _id: { $in: matchedBedIds } }).lean();
+      tenants = await Tenant.find({ owner: req.user.id, status: "Active", tenancyType: { $ne: "short_stay" }, _id: { $in: matchedBedIds } }).lean();
     } else {
-      tenants = await Tenant.find({ owner: req.user.id, status: "Active", name: { $regex: q, $options: "i" } }).lean();
+      tenants = await Tenant.find({ owner: req.user.id, status: "Active", tenancyType: { $ne: "short_stay" }, name: { $regex: q, $options: "i" } }).lean();
     }
 
     const results = (await buildTenantSummaries(tenants, FIVE_DAYS_MS))

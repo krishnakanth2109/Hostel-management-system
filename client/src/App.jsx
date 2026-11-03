@@ -36,6 +36,7 @@ import MasterWhatsAppReminders from "./pages/master/MasterWhatsAppReminders.jsx"
 import PublicTenantRentDetails from "./pages/PublicTenantRentDetails.jsx";
 import PaymentRequests from "./pages/PaymentRequests.jsx";
 import PrivacyPolicy from "./pages/PrivacyPolicy.jsx";
+import ShortStayBookings from "./pages/ShortStayBookings.jsx";
 
 const HOME_SEO = {
   title: "NILAYAM Hostel Management Software | Hostel & PG Management",
@@ -156,6 +157,9 @@ export default function App() {
       } />
     <Route path="/rent-management" element={
         <RequireUser><Layout><RentManagement/></Layout></RequireUser>
+      } />
+      <Route path="/short-stay-bookings" element={
+        <RequireUser><Layout><ShortStayBookings/></Layout></RequireUser>
       } />
           <Route path="/onboarding-manager" element={
         <RequireUser><Layout><OnboardingManager/></Layout></RequireUser>
