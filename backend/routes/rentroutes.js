@@ -17,6 +17,7 @@ import {
 } from "../utils/cloudinaryDelivery.js";
 import { ensureMonthlyRentDue } from "../services/rentDueGeneration.js";
 import { getRentDueTiming, splitRentDueAmounts } from "../utils/rentDueTiming.js";
+import { addVacatingRefundNote } from "../utils/emailTemplateNotice.js";
 
 const router = express.Router();
 
@@ -661,7 +662,8 @@ function buildReminderEmail({ tenant, record, buildingDetails, isOverdue, daysOv
     ${buildRoomAllocationSection(buildingDetails)}
     <hr class="divider" />
     <div class="note-box">
-      💡 <strong>Note:</strong> If you have already made this payment, please disregard this reminder. 
+      💡 <strong>Note:</strong> If you have already made this payment, please disregard this reminder.<br/><br/>
+      Please inform the hostel management at least 10 days before vacating to get your advance amount refunded. If you fail to inform 10 days before, then the advance amount will not be refunded.
     </div>`;
 
   const subject = advanceOnlyDue
@@ -898,7 +900,7 @@ async function sendBrevoEmail(toEmail, toName, subject, htmlContent) {
     sender: { name: (process.env.BREVO_SENDER_NAME || "Nilayam Hostel Manager").trim(), email: senderEmail },
     to: [{ email: toEmail, name: toName }],
     subject,
-    htmlContent,
+    htmlContent: addVacatingRefundNote(htmlContent),
   };
   try {
     const { data } = await axios.post(BREVO_API_URL, payload, {

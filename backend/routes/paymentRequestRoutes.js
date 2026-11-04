@@ -15,6 +15,7 @@ import { SECURE_TENANT_ID_RE } from "../utils/tenantSecureId.js";
 import { logActivity } from "../utils/activityLogger.js";
 import { sendPushToOwner } from "../utils/pushService.js";
 import { buildFullPaymentEmail, buildPartialPaymentEmail } from "./rentroutes.js";
+import { addVacatingRefundNote } from "../utils/emailTemplateNotice.js";
 import {
   CLOUDINARY_IMAGE_WIDTHS,
   withOptimizedPaymentRequestReceipt,
@@ -158,7 +159,7 @@ async function sendBrevoEmail(toEmail, toName, subject, htmlContent) {
     sender: { name: senderName, email: senderEmail },
     to: [{ email: toEmail, name: toName }],
     subject,
-    htmlContent,
+    htmlContent: addVacatingRefundNote(htmlContent),
   }, {
     headers: { "Content-Type": "application/json", "api-key": apiKey },
   });
@@ -179,6 +180,7 @@ function paymentDecisionEmail({ tenant, request, approved, reason = "" }) {
           ${reason ? `<p><strong>Reason:</strong> ${reason}</p>` : ""}
           <p style="color:#64748b;font-size:13px;">Please contact your hostel management for any clarification.</p>
         </div>
+        <div class="footer" style="padding:15px;text-align:center;background:#f8fafc;color:#94a3b8;font-size:11px;">Hostel Manager &middot; This is an automated message.</div>
       </div>
     </div>`;
 }

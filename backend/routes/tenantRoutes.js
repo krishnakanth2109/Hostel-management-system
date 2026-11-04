@@ -19,6 +19,7 @@ import {
   withOptimizedTenantDocuments,
 } from "../utils/cloudinaryDelivery.js";
 import { generateFirstRentDueWithCatchUpFallback } from "../services/rentDueGeneration.js";
+import { addVacatingRefundNote } from "../utils/emailTemplateNotice.js";
 
 const router = express.Router();
 
@@ -155,7 +156,7 @@ const otpEmailHtml = (otpCode) => `
 const advanceAmountUpdatedEmailHtml = ({ tenant, previousAdvance, newAdvance, paidAdvance }) => {
   const fmtINR = (n) => new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(n || 0);
   const pendingAdvance = Math.max(0, Number(newAdvance || 0) - Number(paidAdvance || 0));
-  return `
+  return addVacatingRefundNote(`
 <!DOCTYPE html>
 <html>
 <body style="margin:0;padding:0;background:#f1f5f9;font-family:'Segoe UI',Tahoma,sans-serif;">
@@ -188,7 +189,7 @@ const advanceAmountUpdatedEmailHtml = ({ tenant, previousAdvance, newAdvance, pa
     </td></tr>
   </table>
 </body>
-</html>`;
+</html>`);
 };
 
 const escapeEmailText = (value) => String(value ?? "")
@@ -205,7 +206,7 @@ const shortStayEmailDate = (value) => new Date(value).toLocaleDateString("en-IN"
 
 function shortStayEmailLayout({ tenant, title, intro, accent, badge, amountLabel, amount, rows, footer }) {
   const safeName = escapeEmailText(tenant.name);
-  return `<!doctype html><html><body style="margin:0;background:#f1f5f9;font-family:Segoe UI,Arial,sans-serif;color:#0f172a">
+  return addVacatingRefundNote(`<!doctype html><html><body style="margin:0;background:#f1f5f9;font-family:Segoe UI,Arial,sans-serif;color:#0f172a">
     <table width="100%" cellpadding="0" cellspacing="0" role="presentation"><tr><td align="center" style="padding:32px 14px">
       <table width="560" cellpadding="0" cellspacing="0" role="presentation" style="max-width:560px;width:100%;background:#fff;border-radius:18px;overflow:hidden;box-shadow:0 12px 36px rgba(15,23,42,.12)">
         <tr><td style="background:${accent};padding:28px 30px;color:#fff"><div style="font-size:12px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;opacity:.85">Nilayam · Short Stay</div><h1 style="margin:8px 0 0;font-size:23px">${title}</h1></td></tr>
@@ -214,7 +215,7 @@ function shortStayEmailLayout({ tenant, title, intro, accent, badge, amountLabel
           <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="width:100%;border:1px solid #e2e8f0;border-radius:14px;border-collapse:separate;border-spacing:0;overflow:hidden;background:#ffffff">${rows.map(([label, value], index) => `<tr><td width="46%" valign="top" style="width:46%;padding:13px 16px;color:#64748b;font-size:13px;line-height:1.45;border-bottom:${index < rows.length - 1 ? "1px solid #eef2f7" : "0"};">${escapeEmailText(label)}</td><td width="54%" valign="top" align="right" style="width:54%;padding:13px 16px 13px 24px;color:#0f172a;font-size:13px;font-weight:700;line-height:1.45;text-align:right;word-break:break-word;border-bottom:${index < rows.length - 1 ? "1px solid #eef2f7" : "0"};">${escapeEmailText(value)}</td></tr>`).join("")}</table>
           <p style="margin:20px 0 0;padding:13px 14px;background:#f8fafc;border-radius:10px;color:#64748b;font-size:12px;line-height:1.6">${footer}</p>
         </td></tr><tr><td style="padding:15px;text-align:center;background:#f8fafc;color:#94a3b8;font-size:11px">Automated email from Nilayam Hostel Management</td></tr>
-      </table></td></tr></table></body></html>`;
+      </table></td></tr></table></body></html>`);
 }
 
 function shortStayPaymentEmail({ tenant, paymentAmount, paymentType, note }) {
@@ -290,7 +291,7 @@ function shortStayReminderEmail(tenant) {
       amountLabel: "Amount pending",
       amount: due,
       rows,
-      footer: "If you have already completed this payment, please contact your hostel manager.",
+      footer: "If you have already completed this payment, please contact your hostel manager.<br><br>Please inform the hostel management at least 10 days before vacating to get your advance amount refunded. If you fail to inform 10 days before, then the advance amount will not be refunded.",
     }),
   };
 }

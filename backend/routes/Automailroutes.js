@@ -14,6 +14,7 @@ import AutoMailConfig from "../models/Automailconfig.js";
 import Building from "../models/Building.js";
 import User from "../models/User.js";
 import { ensureTenantSecureId } from "../utils/tenantSecureId.js";
+import { addVacatingRefundNote } from "../utils/emailTemplateNotice.js";
 
 const router = express.Router();
 
@@ -56,7 +57,7 @@ async function sendBrevoEmail(toEmail, toName, subject, htmlContent) {
     sender: { name: senderName, email: senderEmail },
     to: [{ email: toEmail, name: toName }],
     subject,
-    htmlContent,
+    htmlContent: addVacatingRefundNote(htmlContent),
   };
 
   try {
@@ -537,7 +538,10 @@ function buildReminderEmail({ tenant, record, buildingDetails, isOverdue, daysOv
     ${buildTenantDetailsSection(tenant, accentColor)}
     ${buildRoomAllocationSection(buildingDetails)}
     
-    <div class="note-box">💡 <strong>Note:</strong> If you have already made this payment, please disregard this reminder.</div>`;
+    <div class="note-box">
+      💡 <strong>Note:</strong> If you have already made this payment, please disregard this reminder.<br/><br/>
+      Please inform the hostel management at least 10 days before vacating to get your advance amount refunded. If you fail to inform 10 days before, then the advance amount will not be refunded.
+    </div>`;
 
   const subject = hasPreviousPending ? `🚨 Urgent: Rent Arrears — ${fmtINR(totalAccumulatedDue)} Outstanding` : isOverdue ? `⚠️ Rent Overdue — ${month}` : `🔔 Rent Reminder: Due ${daysUntilDue === 0 ? "Today" : `in ${daysUntilDue} Days`} — ${month}`;
   const icon  = hasPreviousPending ? "🚨" : isOverdue ? "⚠️" : "🔔";
@@ -566,7 +570,10 @@ function buildAdvancePendingEmail({ tenant, buildingDetails, advanceAmount = 0, 
     </div>
     ${buildTenantDetailsSection(tenant, accentColor)}
     ${buildRoomAllocationSection(buildingDetails)}
-    <div class="note-box"><strong>Note:</strong> If you have already made this advance payment, please disregard this reminder.</div>`;
+    <div class="note-box">
+      <strong>Note:</strong> If you have already made this advance payment, please disregard this reminder.<br/><br/>
+      Please inform the hostel management at least 10 days before vacating to get your advance amount refunded. If you fail to inform 10 days before, then the advance amount will not be refunded.
+    </div>`;
 
   return {
     subject: `Advance Payment Pending - ${fmtINR(advancePending)}`,
